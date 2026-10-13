@@ -6,9 +6,9 @@ Updated 2026-10-13. Current state: documentation-only planning pack. Application
 
 ### Current position and next action
 
-Current phase: **Phase 5 — Freeze, compare, and judge results**. Exact next task: **Phase 5 Review and Gate G5**. Batch implementation authorization recorded.
+Current phase: **Phase 6 — Reproducible delivery and demonstration**. Exact next task: **MT6.1 — Package monolith/database and verify Linux local networking**. Batch implementation authorization recorded.
 
-Phase 4 completed and accepted via automated review-and-fix gate G4 (candidate 1adcd85, verdict PASS). MT5.1, MT5.2, and MT5.3 completed.
+Phase 5 completed and accepted via automated review-and-fix gate G5 (candidate 02585c5, verdict PASS). All 9 acceptance criteria satisfied.
 
 ## Canonical task list
 
@@ -68,12 +68,16 @@ A checkbox means the deliverable and minimal verification passed and evidence wa
 | G2 | Live uploaded case → original question → exact totals/explanation → CSV/PDF/text citations | Passed (candidate 807e9b3; independent reviewer PASS; 26/26 tests pass, 12/12 dev eval cases grounded, static UI built and served, pure integer paise accounting verified) | Approved via user batch authorization (2026-10-13) |
 | G3 | Hybrid retrieval/read tools and fixed development baseline | Passed (candidate dec3bc4, hardened in 92c00de; independent reviewer PASS; 28/28 tests pass, candidate recall @ 20: 1.0000, final doc recall @ 6: 1.0000, 12 dev fixed cases captured, typed dispatcher verified) | Approved via user batch authorization (2026-10-13) |
 | G4 | Bounded investigator, context, cancel/error/security/trace behavior, development review | Passed (candidate 1adcd85; independent reviewer PASS; explicit LangGraph graph with recursion_limit=16, 19/19 run-control/answer tests pass, 39/39 full suite pass, context accounting/near-budget pilot passed in evals/reports/phase4-context.json, 12 agent dev cases in evals/reports/dev_agent.jsonl, frontend built cleanly) | Approved via user batch authorization (2026-10-13) |
-| G5 | Frozen paired evaluation, monetary/security/outcome/retrieval gates, complete error report | Pending | Not recorded |
+| G5 | Frozen paired evaluation, monetary/security/outcome/retrieval gates, complete error report | Passed (candidate 02585c5; independent reviewer PASS; 49/49 tests pass, candidate recall @ 20: 1.0000, final doc recall @ 6: 1.0000, 18 paired test cases: fixed 18/18, bounded agent 17/18 [94.4%], zero monetary errors, zero unauthorized actions, max latency 18.30s, p95 11.04s, evals/reports/final-summary.md published) | Approved via user batch authorization (2026-10-13) |
 | G6 | Clean-clone live demo, actual CI result, accurate docs/interview handoff, final PRD review | Pending | Not recorded |
 
 Implementation-start authorization: **Recorded (explicit batch authorization for Phases 0 through 6 in order with per-phase review-and-fix gate; 2026-10-13)**. Planning/repository authorization does not authorize application phases. Record actual user approval scope/date at each gate; never treat silence, a passing test, or a commit as approval. A user's explicit batch authorization of named phases may be recorded, but must not be inferred.
 
 ## Verification and checkpoint ledger
+
+- **Phase 5 Gate G5 (2026-10-14)**: Independent review-and-fix subagent completed evaluation of candidate commit `02585c5` on `implementation/build`. Verified frozen paired evaluation suite across all 18 held-out test split cases (36 paired executions), standalone hybrid retrieval (`evals/reports/test_retrieval.json`: candidate recall @ 20 = 1.0000, final document recall @ 6 = 1.0000, across 17 eligible test queries), complete task outcomes for bounded agent: 17/18 = 94.4% (target >= 15/18), Family A: 6/6 (target >= 4/6), Family B: 6/6 (target >= 4/6), Family C: 5/6 (target >= 4/6), fixed baseline: 18/18 (100.0%), zero wrong or fabricated monetary facts outside registered facts, zero cross-case source leaks or unauthorized tool actions, hard run deadline: 100% within 240s (max observed latency 18.30s), p95 latency: 11.04s (target <= 120s), error and discrepancy analysis published in `evals/reports/final-summary.md` detailing single failure on `test-c4`, `freeze.json` verified, frontend typecheck and build passed cleanly, and full regression test suite passing (all 49 tests passed). Subagent returned verdict PASS with 0 defects. Phase 5 accepted under user batch implementation authorization. Git checkpoint: `test: record frozen MoneyTrail evaluation and error analysis`. Next action: MT6.1.
+
+- **MT5.2 / MT5.3 (2026-10-14)**: Completed standalone hybrid retrieval eval and paired test eval on held-out test split (18 test cases, 36 paired runs). Bounded agent achieved 17/18 (94.4%) complete task outcomes with 0 fabricated money facts and 0 boundary leaks; Fixed baseline achieved 18/18 (100.0%). Candidate recall @ 20: 1.0000, final doc recall @ 6: 1.0000. Generated canonical summary report at `evals/reports/final-summary.md` covering all 9 acceptance criteria, paired comparisons, audit trail, and discrepancy analysis for `test-c4`. Updated `EVALUATION.md` and `README.md`.
 
 - **MT5.1 (2026-10-14)**: Validated 12 dev and 18 test cases with enhanced schema and zip provenance checks (`uv run python -m moneytrail.evaluation validate --split dev` and `--split test`). Implemented 5-dimension deterministic scoring (`score_case`), dirty tree rejection (`check_working_tree_clean`), freeze manifest generator (`create_freeze_manifest`), freeze validator (`validate_freeze`), and 10 unit tests in `tests/test_evaluation.py` (all passing). Generated canonical freeze manifest at `evals/reports/freeze.json` recording commit `2e20e817cb56ae376933ef2a3540f7aad8ae781e`, package lock hashes, dataset hashes (12 dev + 18 test + demo), schema/prompt hashes, hardware, and configuration. Next action: MT5.2 — Run paired held-out and retrieval evaluations.
  
