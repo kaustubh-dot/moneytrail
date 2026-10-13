@@ -1,0 +1,6 @@
+fee_id,order_id,assessed_at,amount_paise,fee_kind
+F-001,O-001,2026-09-25T10:00:00+05:30,200000,processing
+F-002,O-002,2026-09-26T11:00:00+05:30,150000,processing
+F-003,O-003,2026-09-27T14:00:00+05:30,100000,processing
+F-004,O-004,2026-09-27T15:00:00+05:30,70000,processing
+F-005,O-005,2026-09-30T16:00:00+05:30,80000,processing

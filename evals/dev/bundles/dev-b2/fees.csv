@@ -1,0 +1,2 @@
+fee_id,order_id,assessed_at,amount_paise,fee_kind
+F-B2-1,O-B2-1,2026-09-20T10:00:00+05:30,200000,processing

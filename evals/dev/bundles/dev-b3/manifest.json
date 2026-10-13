@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "case_key": "dev-b3-reimport",
+  "merchant_id": "meridian_store",
+  "currency": "INR",
+  "timezone": "Asia/Kolkata",
+  "cohort_start": "2026-09-01T00:00:00+05:30",
+  "cohort_end": "2026-10-01T00:00:00+05:30",
+  "as_of": "2026-10-01T00:00:00+05:30",
+  "completeness": {
+    "orders": "complete",
+    "refunds": "complete",
+    "fees": "complete",
+    "payouts": "complete",
+    "payout_links": "complete",
+    "policies": "complete"
+  },
+  "files": [
+    {
+      "path": "orders.csv",
+      "sha256": "c5c25b46dfe6b5fe62ee5651ef6606d8c44ec05a16c65b4bb0fb3e8dab20f8db",
+      "kind": "orders"
+    },
+    {
+      "path": "refunds.csv",
+      "sha256": "5a9bfe7e89fb9a6752d5bd047e4d146c36e2bc66d4d008db547e1227a0850e58",
+      "kind": "refunds"
+    },
+    {
+      "path": "fees.csv",
+      "sha256": "8fd8cc3c6b4cddf3790d73981fe40e4aeae810069695d334f5a1811cf1bbd3db",
+      "kind": "fees"
+    },
+    {
+      "path": "payouts.csv",
+      "sha256": "bd0238690a8f357d8e5b6fd888d258c63743f8744c9fd6f75146d09869ebb7fd",
+      "kind": "payouts"
+    },
+    {
+      "path": "payout_links.csv",
+      "sha256": "bc71ddde23a44091da486249dd2e3e8452ced5107af451a21498d028428bcd55",
+      "kind": "payout_links"
+    },
+    {
+      "path": "docs/memo.md",
+      "sha256": "8f7b2a265d3fb36798bc1093fca85afd94597f5efbfb76812f2093d3099051e9",
+      "kind": "correspondence"
+    },
+    {
+      "path": "docs/policy.pdf",
+      "sha256": "89e3d759d2c8a0a4f5ffc51e224208bb57b988b75df50b166f0751f6e3d62921",
+      "kind": "policy"
+    }
+  ]
+}

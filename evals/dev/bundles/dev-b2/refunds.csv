@@ -1,0 +1,2 @@
+refund_id,order_id,processed_at,amount_paise,status
+R-B2-1,O-B2-1,,2000000,pending
