@@ -13,7 +13,8 @@ import psycopg
 from moneytrail.config import Settings
 from moneytrail.db import get_reader_connection, get_writer_connection
 from moneytrail.ingest import import_bundle
-from moneytrail.tools import inspect_order, reconcile
+from moneytrail.schemas import ToolCall
+from moneytrail.tools import dispatch_tool, inspect_order, reconcile, select_policy
 
 
 @pytest.mark.asyncio
@@ -215,6 +216,88 @@ async def test_missing_link_is_not_pending(test_settings: Settings, tmp_path: Pa
         # Incomplete family sets fact.complete to False
         gross_fact = next(f for f in rec.facts if f.fact_id == "fact_gross")
         assert gross_fact.complete is False
+
+    finally:
+        await reader_conn.close()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_tool(test_settings: Settings):
+    """
+    Verify typed evidence dispatcher across all 5 tool variants:
+    reconcile, inspect_order, select_policy, search_evidence, and read_source.
+    Enforces RESULT_LIMIT, unknown tool rejection, and scoped case injection.
+    """
+    demo_zip = Path("fixtures/demo.zip")
+    res = await import_bundle(demo_zip, test_settings)
+    case_id = res.case_id
+
+    reader_conn = await get_reader_connection(test_settings)
+    try:
+        # 1. Reconcile tool dispatch
+        call_rec = ToolCall(action="reconcile")
+        res_rec = await dispatch_tool(case_id, call_rec, test_settings, reader_conn)
+        assert res_rec.action == "reconcile"
+        assert res_rec.data["gross_paise"] == 24000000
+        assert res_rec.data["unexplained_difference_paise"] == 0
+        assert len(res_rec.facts) >= 6
+        assert len(res_rec.citations) >= 1
+
+        # 2. Inspect order tool dispatch
+        call_order = ToolCall(action="inspect_order", order_id="O-001")
+        res_order = await dispatch_tool(case_id, call_order, test_settings, reader_conn)
+        assert res_order.action == "inspect_order"
+        assert res_order.data["order_id"] == "O-001"
+        assert res_order.data["gross_paise"] == 8000000
+        assert res_order.data["expected_net_paise"] == 6800000
+        assert len(res_order.facts) == 2
+        assert len(res_order.citations) == 4
+
+        # 3. Select policy tool dispatch (cohort mode)
+        call_pol_cohort = ToolCall(action="select_policy", order_ids=None)
+        res_pol_cohort = await dispatch_tool(case_id, call_pol_cohort, test_settings, reader_conn)
+        assert res_pol_cohort.action == "select_policy"
+        assert len(res_pol_cohort.data["applicable_policies"]) >= 1
+
+        # Select policy tool dispatch (explicit orders)
+        call_pol_explicit = ToolCall(action="select_policy", order_ids=["O-001", "O-002"])
+        res_pol_explicit = await dispatch_tool(case_id, call_pol_explicit, test_settings, reader_conn)
+        assert res_pol_explicit.action == "select_policy"
+        assert any(f.fact_id == "fact_O-001_expected_fee" for f in res_pol_explicit.facts)
+
+        # 4. Search evidence tool dispatch
+        call_search = ToolCall(action="search_evidence", query="settlement terms", kind="all", limit=4)
+        res_search = await dispatch_tool(case_id, call_search, test_settings, reader_conn)
+        assert res_search.action == "search_evidence"
+        assert len(res_search.data["items"]) >= 1
+        assert len(res_search.citations) >= 1
+        top_src_id = uuid.UUID(str(res_search.data["items"][0]["source_id"]))
+        top_locator = res_search.data["items"][0]["locator_id"]
+
+        # 5. Read source tool dispatch
+        call_read = ToolCall(action="read_source", source_id=top_src_id, locator_id=top_locator)
+        res_read = await dispatch_tool(case_id, call_read, test_settings, reader_conn)
+        assert res_read.action == "read_source"
+        assert res_read.data["source_id"] == top_src_id
+        assert res_read.data["locator_id"] == top_locator
+        assert len(res_read.data["text"]) > 0
+
+        # 6. Reject unknown tool
+        with pytest.raises(ValueError, match="UNKNOWN_TOOL"):
+            # Construct raw model bypassing enum
+            fake_call = ToolCall.model_construct(action="unsupported_analytics")
+            await dispatch_tool(case_id, fake_call, test_settings, reader_conn)
+
+        # 7. Reject RESULT_LIMIT overflow (>20 orders in select_policy)
+        with pytest.raises(ValueError, match="RESULT_LIMIT"):
+            overflow_orders = [f"O-{i}" for i in range(25)]
+            overflow_call = ToolCall(action="select_policy", order_ids=overflow_orders)
+            await dispatch_tool(case_id, overflow_call, test_settings, reader_conn)
+
+        # 8. Missing required argument
+        with pytest.raises(ValueError, match="MISSING_ARGUMENT"):
+            empty_order_call = ToolCall(action="inspect_order", order_id="")
+            await dispatch_tool(case_id, empty_order_call, test_settings, reader_conn)
 
     finally:
         await reader_conn.close()

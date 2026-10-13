@@ -11,7 +11,16 @@ import psycopg
 from psycopg import sql
 from psycopg.rows import dict_row
 
-from moneytrail.schemas import Citation, Fact, OrderEvidence, PolicyEvidence, Reconciliation
+from moneytrail.config import Settings
+from moneytrail.schemas import (
+    Citation,
+    Fact,
+    OrderEvidence,
+    PolicyEvidence,
+    Reconciliation,
+    ToolCall,
+    ToolResult,
+)
 
 
 async def reconcile(case_id: uuid.UUID, db: psycopg.AsyncConnection) -> Reconciliation:
@@ -481,6 +490,13 @@ async def inspect_order(
         )
         order_links = await cur.fetchall()
 
+    total_related_rows = len(order_refunds) + len(order_fees) + len(order_links)
+    if total_related_rows > 100:
+        raise ValueError(
+            f"RESULT_LIMIT: Order '{order_id}' has {total_related_rows} related records exceeding the 100-row limit. "
+            f"Please formulate a narrower supported question."
+        )
+
     gross_paise = order_row["gross_paise"]
     completed_refunds = sum(
         r["amount_paise"] for r in order_refunds if r["status"] == "completed"
@@ -861,3 +877,148 @@ async def select_policy(
         citations=all_citations,
         facts=facts,
     )
+
+
+async def dispatch_tool(
+    case_id: uuid.UUID,
+    call: ToolCall,
+    settings: Settings | None = None,
+    db: psycopg.AsyncConnection | None = None,
+) -> ToolResult:
+    """
+    Typed evidence dispatcher mapping discriminated ToolCall requests to ordinary functions.
+    Injects immutable case_id; rejects unknown tools, SQL strings, foreign source IDs,
+    and result overflow explicitly.
+    Records safe call IDs and trace metadata.
+    """
+    import time
+    from moneytrail.retrieval import read_source, search_evidence
+    from moneytrail.db import get_reader_connection
+
+    if settings is None:
+        settings = Settings.from_env()
+
+    call_id = f"call_{uuid.uuid4().hex[:12]}"
+    t0 = time.perf_counter()
+
+    close_conn = False
+    if db is None:
+        db = await get_reader_connection(settings)
+        close_conn = True
+
+    try:
+        action = call.action
+        if action == "reconcile":
+            rec = await reconcile(case_id, db)
+            citations = []
+            for f in rec.facts:
+                for c in f.citations:
+                    if c not in citations:
+                        citations.append(c)
+            elapsed_ms = int((time.perf_counter() - t0) * 1000)
+            return ToolResult(
+                tool_call_id=call_id,
+                action="reconcile",
+                data=rec.model_dump(),
+                facts=rec.facts,
+                citations=citations,
+                findings=rec.findings,
+                elapsed_ms=elapsed_ms,
+            )
+
+        elif action == "inspect_order":
+            if not call.order_id or not call.order_id.strip():
+                raise ValueError("MISSING_ARGUMENT: inspect_order requires a non-empty order_id")
+            order_ev = await inspect_order(case_id, call.order_id.strip(), db)
+            elapsed_ms = int((time.perf_counter() - t0) * 1000)
+            return ToolResult(
+                tool_call_id=call_id,
+                action="inspect_order",
+                data=order_ev.model_dump(),
+                facts=order_ev.facts,
+                citations=order_ev.citations,
+                findings=[],
+                elapsed_ms=elapsed_ms,
+            )
+
+        elif action == "select_policy":
+            if call.order_ids is not None and len(call.order_ids) > 20:
+                raise ValueError("RESULT_LIMIT: Explicit order_ids list exceeds maximum limit of 20")
+            pol_ev = await select_policy(case_id, call.order_ids, db)
+            elapsed_ms = int((time.perf_counter() - t0) * 1000)
+            return ToolResult(
+                tool_call_id=call_id,
+                action="select_policy",
+                data=pol_ev.model_dump(),
+                facts=pol_ev.facts,
+                citations=pol_ev.citations,
+                findings=pol_ev.conflicting_policies,
+                elapsed_ms=elapsed_ms,
+            )
+
+        elif action == "search_evidence":
+            if not call.query or not call.query.strip():
+                raise ValueError("MISSING_ARGUMENT: search_evidence requires a non-empty query")
+            kind = call.kind or "all"
+            limit = min(call.limit or 6, 20)
+            search_res = await search_evidence(
+                case_id=case_id,
+                query=call.query.strip(),
+                kind=kind,
+                limit=limit,
+                settings=settings,
+                db=db,
+            )
+            citations = [
+                Citation(
+                    source_id=it.source_id,
+                    locator_id=it.locator_id,
+                    label=f"Search Hit: {it.kind} ({it.locator_id})",
+                )
+                for it in search_res.items
+            ]
+            elapsed_ms = int((time.perf_counter() - t0) * 1000)
+            return ToolResult(
+                tool_call_id=call_id,
+                action="search_evidence",
+                data=search_res.model_dump(),
+                facts=[],
+                citations=citations,
+                findings=[],
+                elapsed_ms=elapsed_ms,
+            )
+
+        elif action == "read_source":
+            if not call.source_id or not call.locator_id:
+                raise ValueError("MISSING_ARGUMENT: read_source requires source_id and locator_id")
+            source_seg = await read_source(
+                case_id=case_id,
+                source_id=call.source_id,
+                locator_id=call.locator_id,
+                settings=settings,
+                db=db,
+            )
+            citations = [
+                Citation(
+                    source_id=source_seg.source_id,
+                    locator_id=source_seg.locator_id,
+                    label=f"Source Segment: {source_seg.metadata.get('relative_name', '')} ({source_seg.locator_id})",
+                )
+            ]
+            elapsed_ms = int((time.perf_counter() - t0) * 1000)
+            return ToolResult(
+                tool_call_id=call_id,
+                action="read_source",
+                data=source_seg.model_dump(),
+                facts=[],
+                citations=citations,
+                findings=[],
+                elapsed_ms=elapsed_ms,
+            )
+
+        else:
+            raise ValueError(f"UNKNOWN_TOOL: Tool '{action}' is not an allowlisted evidence tool")
+
+    finally:
+        if close_conn and db is not None:
+            await db.close()
