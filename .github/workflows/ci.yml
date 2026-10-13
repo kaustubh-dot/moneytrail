@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main", "implementation/build" ]
+  pull_request:
+    branches: [ "main", "implementation/build" ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Lint, Build, and Offline Test Regressions
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16@sha256:7b822b0aac60967beb1ea5e576b8602c94c300a157d187f385ae3e0da199b90a
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: moneytrail_admin
+          POSTGRES_DB: moneytrail
+          POSTGRES_PASSWORD: ci_admin_secret_password_12345
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          version: "latest"
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: "frontend/package-lock.json"
+
+      - name: Install Python dependencies
+        run: uv sync --frozen --extra dev
+
+      - name: Install Frontend dependencies
+        run: npm --prefix frontend ci
+
+      - name: Frontend typecheck
+        run: npm --prefix frontend run typecheck
+
+      - name: Frontend build
+        run: npm --prefix frontend run build
+
+      - name: Configure ephemeral CI environment
+        run: |
+          cat << 'EOF_ENV_SETUP' > .env.setup
+          POSTGRES_USER=moneytrail_admin
+          POSTGRES_DB=moneytrail
+          POSTGRES_PASSWORD=ci_admin_secret_password_12345
+          MONEYTRAIL_ADMIN_DATABASE_URL=postgresql://moneytrail_admin:ci_admin_secret_password_12345@127.0.0.1:5432/moneytrail
+          EOF_ENV_SETUP
+
+          cat << 'EOF_ENV' > .env
+          MONEYTRAIL_DATABASE_URL=postgresql://moneytrail_writer:ci_writer_secret_password_12345@127.0.0.1:5432/moneytrail
+          MONEYTRAIL_READ_DATABASE_URL=postgresql://moneytrail_reader:ci_reader_secret_password_12345@127.0.0.1:5432/moneytrail
+          MONEYTRAIL_OWNER_TOKEN=ci_owner_token_0123456789abcdef0123456789abcdef
+          MONEYTRAIL_OLLAMA_URL=http://127.0.0.1:11434
+          MONEYTRAIL_MODEL=qwen3:8b
+          MONEYTRAIL_MODEL_DIGEST=500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41
+          MONEYTRAIL_MODEL_TOKENIZER=Qwen/Qwen3-8B
+          MONEYTRAIL_TOKENIZER_REVISION=Qwen/Qwen2.5-7B-Instruct@b968826d9c46dd6066d109eabc6255188de91218
+          MONEYTRAIL_EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+          MONEYTRAIL_EMBEDDING_REVISION=1110a243fdf4706b3f48f1d95db1a4f5529b4d41
+          MONEYTRAIL_RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L6-v2
+          MONEYTRAIL_RERANKER_REVISION=233902d25c440f23af6f7d6e94d2946bac0bee0a
+          MONEYTRAIL_DATA_DIR=./data
+          MONEYTRAIL_INPUT_TOKEN_BUDGET=6000
+          MONEYTRAIL_MAX_TOOL_CALLS=6
+          MONEYTRAIL_MAX_MODEL_TURNS=4
+          MONEYTRAIL_MODEL_TIMEOUT_SECONDS=60
+          MONEYTRAIL_RUN_TIMEOUT_SECONDS=240
+          EOF_ENV
+
+      - name: Bootstrap and migrate PostgreSQL schema
+        run: |
+          uv run --env-file .env --env-file .env.setup python -m moneytrail.db bootstrap --admin-dsn-env MONEYTRAIL_ADMIN_DATABASE_URL
+          uv run --env-file .env --env-file .env.setup python -m moneytrail.db migrate --admin-dsn-env MONEYTRAIL_ADMIN_DATABASE_URL
+
+      - name: Run offline pytest suite
+        run: uv run --env-file .env --env-file .env.setup pytest -v
+
+      - name: Validate dataset splits and freeze manifest
+        run: |
+          uv run python -m moneytrail.evaluation validate --split dev
+          uv run python -m moneytrail.evaluation validate --split test
+          uv run python -c "from pathlib import Path; from moneytrail.evaluation import validate_freeze; validate_freeze(Path('evals/reports/freeze.json'))"

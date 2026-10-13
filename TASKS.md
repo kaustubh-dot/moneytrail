@@ -6,9 +6,9 @@ Updated 2026-10-13. Current state: documentation-only planning pack. Application
 
 ### Current position and next action
 
-Current phase: **Phase 6 — Reproducible delivery and demonstration**. Exact next task: **MT6.1 — Package monolith/database and verify Linux local networking**. Batch implementation authorization recorded.
+Current phase: **Phase 6 — Reproducible delivery and demonstration**. Exact next task: **MT6.3 — Finish demo/interview handoff and PRD review**. Batch implementation authorization recorded.
 
-Phase 5 completed and accepted via automated review-and-fix gate G5 (candidate 02585c5, verdict PASS). All 9 acceptance criteria satisfied.
+Phase 5 completed and accepted via automated review-and-fix gate G5 (candidate 02585c5, verdict PASS). MT6.1 and MT6.2 completed.
 
 ## Canonical task list
 
@@ -55,8 +55,8 @@ A checkbox means the deliverable and minimal verification passed and evidence wa
 
 ### Phase 6 — Reproducible delivery and demonstration
 
-- [ ] **MT6.1** Package monolith/database and verify Linux local networking. PRD: MT-11, MT-13, MT-15. Depends on G5 approval.
-- [ ] **MT6.2** Add offline CI and prove clean-clone live setup. PRD: MT-01, MT-10, MT-11, MT-15. Depends on MT6.1.
+- [x] **MT6.1** Package monolith/database and verify Linux local networking. PRD: MT-11, MT-13, MT-15. Depends on G5 approval.
+- [x] **MT6.2** Add offline CI and prove clean-clone live setup. PRD: MT-01, MT-10, MT-11, MT-15. Depends on MT6.1.
 - [ ] **MT6.3** Finish demo/interview handoff and PRD review. PRD: MT-10, MT-12, MT-14, MT-15, MT-16. Depends on MT6.2.
 
 ## Gate ledger
@@ -74,6 +74,10 @@ A checkbox means the deliverable and minimal verification passed and evidence wa
 Implementation-start authorization: **Recorded (explicit batch authorization for Phases 0 through 6 in order with per-phase review-and-fix gate; 2026-10-13)**. Planning/repository authorization does not authorize application phases. Record actual user approval scope/date at each gate; never treat silence, a passing test, or a commit as approval. A user's explicit batch authorization of named phases may be recorded, but must not be inferred.
 
 ## Verification and checkpoint ledger
+
+- **MT6.2 (2026-10-14)**: Created `.github/workflows/ci.yml` defining offline GitHub Actions workflow with PostgreSQL/pgvector service (`pgvector/pgvector:pg16@sha256:7b822b0...`), locked dependency sync, frontend typecheck/build, ephemeral database configuration, idempotent migrations, full 49-test regression suite, and dataset/freeze validation without live LLM calls. Created executable `scripts/smoke.sh` implementing authenticated case upload, exact integer reconciliation check, original question submission, polling, grounding checks, and source segment resolution; verified `bash scripts/smoke.sh --live` passed in 13s against running Ollama provider. Verified clean-clone process and isolated test cleanup. Next action: MT6.3 — Finish demo/interview handoff and PRD review.
+
+- **MT6.1 (2026-10-14)**: Packaged application monolith in multi-stage Dockerfile (`node:22-bookworm-slim@sha256:c3de60bf...` builder and `python:3.12-slim-bookworm@sha256:34386ef...` runtime) with pinned locks and non-root execution. Created `compose.yaml` with exactly `db` (`pgvector/pgvector:pg16@sha256:7b822b0...`) and `app` services under Linux host networking. Created `.dockerignore` excluding secrets, virtual environments, and evaluation traces. Implemented executable `scripts/start-local.sh` verifying `.env` and `.env.setup`, database readiness, idempotent bootstrap/migrations, Ollama model availability (`qwen3:8b`), frontend assets, and local loopback serving at `127.0.0.1:8000`. Verified loopback-only listeners on ports 5432 and 11434 with zero public network exposure. Updated ARCHITECTURE.md. Next action: MT6.2.
 
 - **Phase 5 Gate G5 (2026-10-14)**: Independent review-and-fix subagent completed evaluation of candidate commit `02585c5` on `implementation/build`. Verified frozen paired evaluation suite across all 18 held-out test split cases (36 paired executions), standalone hybrid retrieval (`evals/reports/test_retrieval.json`: candidate recall @ 20 = 1.0000, final document recall @ 6 = 1.0000, across 17 eligible test queries), complete task outcomes for bounded agent: 17/18 = 94.4% (target >= 15/18), Family A: 6/6 (target >= 4/6), Family B: 6/6 (target >= 4/6), Family C: 5/6 (target >= 4/6), fixed baseline: 18/18 (100.0%), zero wrong or fabricated monetary facts outside registered facts, zero cross-case source leaks or unauthorized tool actions, hard run deadline: 100% within 240s (max observed latency 18.30s), p95 latency: 11.04s (target <= 120s), error and discrepancy analysis published in `evals/reports/final-summary.md` detailing single failure on `test-c4`, `freeze.json` verified, frontend typecheck and build passed cleanly, and full regression test suite passing (all 49 tests passed). Subagent returned verdict PASS with 0 defects. Phase 5 accepted under user batch implementation authorization. Git checkpoint: `test: record frozen MoneyTrail evaluation and error analysis`. Next action: MT6.1.
 

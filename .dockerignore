@@ -1,0 +1,28 @@
+.git
+.github
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+*.egg-info
+dist
+build
+
+# Secrets and local configurations
+.env
+.env.setup
+data/
+data/pgdata/
+
+# Frontend dependencies and temporary artifacts
+node_modules
+frontend/node_modules
+frontend/dist
+
+# Test and evaluation traces
+evals/reports/*.json
+evals/reports/*.jsonl
+evals/reports/*.md
+!evals/reports/freeze.json

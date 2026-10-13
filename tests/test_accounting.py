@@ -319,9 +319,18 @@ async def test_dispatch_tool(test_settings: Settings):
         finally:
             await writer_conn.close()
 
-        with pytest.raises(ValueError, match="RESULT_LIMIT"):
-            overflow_inspect_call = ToolCall(action="inspect_order", order_id="O-002")
-            await dispatch_tool(case_id, overflow_inspect_call, test_settings, reader_conn)
+        try:
+            with pytest.raises(ValueError, match="RESULT_LIMIT"):
+                overflow_inspect_call = ToolCall(action="inspect_order", order_id="O-002")
+                await dispatch_tool(case_id, overflow_inspect_call, test_settings, reader_conn)
+        finally:
+            w_conn = await get_writer_connection(test_settings)
+            try:
+                async with w_conn.cursor() as cur:
+                    await cur.execute("DELETE FROM fees WHERE case_id = %s AND fee_id LIKE 'F-OVERFLOW-%';", [case_id])
+                await w_conn.commit()
+            finally:
+                await w_conn.close()
 
         # 9. Missing required argument
         with pytest.raises(ValueError, match="MISSING_ARGUMENT"):
