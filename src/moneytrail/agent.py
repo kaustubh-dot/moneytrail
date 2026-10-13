@@ -516,12 +516,15 @@ def assemble_context(
     out_of_cohort_directive = ""
     order_grounding_directive = ""
     fee_grounding_directive = ""
+    incomplete_directive = ""
 
     question_lower = state.question.lower()
     months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
     cohort_month = state.cohort_start.strftime("%B").lower() if state.cohort_start else None
     asked_months = [m for m in months if m in question_lower]
-    if asked_months and cohort_month and cohort_month not in asked_months:
+    order_ids = re.findall(r"\bO-[A-Za-z0-9-]+\b", state.question)
+
+    if asked_months and cohort_month and cohort_month not in asked_months and not order_ids:
         out_of_cohort_directive = (
             "=== OUT-OF-COHORT / UNSUPPORTED SNAPSHOT DETECTED ===\n"
             f"The question asks about '{', '.join(asked_months)}', but the uploaded case cohort is for '{cohort_month}'. "
@@ -531,13 +534,24 @@ def assemble_context(
             "and an EvidenceGap with code='UNSUPPORTED_SNAPSHOT' (needed_evidence='Upload bundle covering requested timeframe').\n\n"
         )
 
-    order_ids = re.findall(r"\bO-[A-Za-z0-9-]+\b", state.question)
     if order_ids and not out_of_cohort_directive:
         oid = order_ids[0]
         order_grounding_directive = (
             f"=== ORDER {oid} EVIDENCE GROUNDING DIRECTIVE ===\n"
             f"When answering claims regarding order {oid}, you MUST explicitly state the gross amount of order {oid} "
             f"using {{{{fact:fact_{oid}_gross}}}} or {{{{fact:fact_gross}}}} in your claims, so that orders.csv source records are evidenced.\n\n"
+        )
+
+    incomplete_findings = [f for f in state.findings if f.get("code", "").startswith("INCOMPLETE_")]
+    if incomplete_findings:
+        f_codes = [f.get("code") for f in incomplete_findings if f.get("code") != "INCOMPLETE_SOURCE_FAMILY"]
+        code_name = f_codes[0] if f_codes else incomplete_findings[0].get("code")
+        incomplete_directive = (
+            f"=== INCOMPLETE SOURCE FAMILIES ({code_name}) ===\n"
+            "The manifest indicates that completeness is 'unknown'. "
+            "You MUST output outcome='partial', state that the data family is incomplete per manifest.json using the corresponding fact token "
+            "(e.g. {{fact:fact_fees}} alongside {{fact:fact_gross}}) and finding code "
+            f"{code_name}, and record an EvidenceGap with code '{code_name}'.\n\n"
         )
 
     if "fee" in question_lower and any(w in question_lower for w in ("percentage", "rate", "bps", "deducted", "verify")):
@@ -561,6 +575,7 @@ def assemble_context(
         + investigation_directive_section
         + out_of_cohort_directive
         + order_grounding_directive
+        + incomplete_directive
         + fee_grounding_directive
     )
 

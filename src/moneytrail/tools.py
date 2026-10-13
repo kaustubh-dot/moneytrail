@@ -418,6 +418,11 @@ async def reconcile(case_id: uuid.UUID, db: psycopg.AsyncConnection) -> Reconcil
         )
     ] if manifest_source_id else []
 
+    if completeness.get("fees") != "complete" and manifest_citations:
+        fees_citations = manifest_citations
+    if completeness.get("refunds") != "complete" and manifest_citations:
+        refunds_citations = manifest_citations
+
     if not pending_citations and gross_citations:
         pending_citations = [gross_citations[0]]
 
@@ -963,7 +968,8 @@ async def select_policy(
         })
 
     facts: list[Fact] = []
-    pols_for_facts = {**all_matching_pols_by_id, **applicable_pols_by_id}
+    pols_for_facts = {p["policy_id"]: p for p in published_policies}
+    seen_fids: set[str] = set()
     for pid, p in pols_for_facts.items():
         locators = p["metadata_locators"] if isinstance(p["metadata_locators"], list) else json.loads(p["metadata_locators"])
         pol_cits = [
@@ -974,36 +980,46 @@ async def select_policy(
             )
             for loc in locators
         ]
-        facts.append(
-            Fact(
-                fact_id=f"fact_{pid}_fee_rate",
-                kind="rate",
-                value=f"{p['fee_bps']} bps",
-                complete=True,
-                citations=pol_cits,
-                derivation={"policy_id": pid, "fee_bps": p["fee_bps"]},
-            )
-        )
-        facts.append(
-            Fact(
-                fact_id=f"fact_{pid}_fee_bps",
-                kind="rate",
-                value=f"{p['fee_bps']} bps",
-                complete=True,
-                citations=pol_cits,
-                derivation={"policy_id": pid, "fee_bps": p["fee_bps"]},
-            )
-        )
-        facts.append(
-            Fact(
-                fact_id=f"fact_{pid}_settlement_days",
-                kind="count",
-                value=p["calendar_days"],
-                complete=True,
-                citations=pol_cits,
-                derivation={"policy_id": pid, "calendar_days": p["calendar_days"]},
-            )
-        )
+        for p_key in {pid, pid.lower(), pid.upper()}:
+            fid_rate = f"fact_{p_key}_fee_rate"
+            if fid_rate not in seen_fids:
+                seen_fids.add(fid_rate)
+                facts.append(
+                    Fact(
+                        fact_id=fid_rate,
+                        kind="rate",
+                        value=f"{p['fee_bps']} bps",
+                        complete=True,
+                        citations=pol_cits,
+                        derivation={"policy_id": pid, "fee_bps": p["fee_bps"]},
+                    )
+                )
+            fid_bps = f"fact_{p_key}_fee_bps"
+            if fid_bps not in seen_fids:
+                seen_fids.add(fid_bps)
+                facts.append(
+                    Fact(
+                        fact_id=fid_bps,
+                        kind="rate",
+                        value=f"{p['fee_bps']} bps",
+                        complete=True,
+                        citations=pol_cits,
+                        derivation={"policy_id": pid, "fee_bps": p["fee_bps"]},
+                    )
+                )
+            fid_days = f"fact_{p_key}_settlement_days"
+            if fid_days not in seen_fids:
+                seen_fids.add(fid_days)
+                facts.append(
+                    Fact(
+                        fact_id=fid_days,
+                        kind="count",
+                        value=p["calendar_days"],
+                        complete=True,
+                        citations=pol_cits,
+                        derivation={"policy_id": pid, "calendar_days": p["calendar_days"]},
+                    )
+                )
 
     if order_ids is not None:
         for o in orders:
