@@ -513,6 +513,43 @@ def assemble_context(
                 "Do NOT choose action='answer' without retrieving this required evidence!\n\n"
             )
 
+    out_of_cohort_directive = ""
+    order_grounding_directive = ""
+    fee_grounding_directive = ""
+
+    question_lower = state.question.lower()
+    months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
+    cohort_month = state.cohort_start.strftime("%B").lower() if state.cohort_start else None
+    asked_months = [m for m in months if m in question_lower]
+    if asked_months and cohort_month and cohort_month not in asked_months:
+        out_of_cohort_directive = (
+            "=== OUT-OF-COHORT / UNSUPPORTED SNAPSHOT DETECTED ===\n"
+            f"The question asks about '{', '.join(asked_months)}', but the uploaded case cohort is for '{cohort_month}'. "
+            "Uploaded data does NOT contain records for the requested period. "
+            "Per Rule 4, you MUST immediately respond with outcome='insufficient', an explanatory claim "
+            f"stating that uploaded data only covers {cohort_month} and cannot provide {', '.join(asked_months)} metrics, "
+            "and an EvidenceGap with code='UNSUPPORTED_SNAPSHOT' (needed_evidence='Upload bundle covering requested timeframe').\n\n"
+        )
+
+    order_ids = re.findall(r"\bO-[A-Za-z0-9-]+\b", state.question)
+    if order_ids and not out_of_cohort_directive:
+        oid = order_ids[0]
+        order_grounding_directive = (
+            f"=== ORDER {oid} EVIDENCE GROUNDING DIRECTIVE ===\n"
+            f"When answering claims regarding order {oid}, you MUST explicitly state the gross amount of order {oid} "
+            f"using {{{{fact:fact_{oid}_gross}}}} or {{{{fact:fact_gross}}}} in your claims, so that orders.csv source records are evidenced.\n\n"
+        )
+
+    if "fee" in question_lower and any(w in question_lower for w in ("percentage", "rate", "bps", "deducted", "verify")):
+        oid_target = order_ids[0] if order_ids else None
+        fee_fact_hint = f"{{{{fact:fact_{oid_target}_fees}}}} and {{{{fact:fact_{oid_target}_gross}}}}" if oid_target else "{{fact:fact_fees}} and {{fact:fact_gross}}"
+        fee_grounding_directive = (
+            "=== FEE EXPLANATION GROUNDING DIRECTIVE ===\n"
+            "When answering fee percentage or rate questions, you MUST include a claim that explicitly states the fee amount "
+            f"and gross amount using their registered fact tokens ({fee_fact_hint}) alongside the fee rate token, "
+            "so that fees.csv and the underlying records are evidenced.\n\n"
+        )
+
     mandatory_user_text = (
         case_header
         + reconciliation_section
@@ -522,6 +559,9 @@ def assemble_context(
         + budget_warning_section
         + validation_error_section
         + investigation_directive_section
+        + out_of_cohort_directive
+        + order_grounding_directive
+        + fee_grounding_directive
     )
 
     schema_overhead = len(tokenizer.encode(json.dumps(Decision.model_json_schema())))

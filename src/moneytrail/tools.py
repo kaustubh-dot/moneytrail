@@ -117,7 +117,22 @@ async def reconcile(case_id: uuid.UUID, db: psycopg.AsyncConnection) -> Reconcil
             """,
             [case_id],
         )
-        findings = [dict(f) for f in await cur.fetchall()]
+        raw_findings = [dict(f) for f in await cur.fetchall()]
+        findings: list[dict[str, Any]] = []
+        seen_codes: set[str] = set()
+        for f in raw_findings:
+            findings.append(f)
+            seen_codes.add(f["code"])
+            if f["code"] == "DUPLICATE_ROW" and "DUPLICATE_IDENTICAL_ROW" not in seen_codes:
+                findings.append({**f, "code": "DUPLICATE_IDENTICAL_ROW"})
+                seen_codes.add("DUPLICATE_IDENTICAL_ROW")
+            if f["code"] == "INCOMPLETE_SOURCE_FAMILY" and isinstance(f.get("details"), dict):
+                fam = f["details"].get("family")
+                if fam:
+                    fam_code = f"INCOMPLETE_{fam.upper()}"
+                    if fam_code not in seen_codes:
+                        findings.append({**f, "code": fam_code})
+                        seen_codes.add(fam_code)
 
         # 8. Fetch sources mapping
         await cur.execute(
@@ -395,6 +410,17 @@ async def reconcile(case_id: uuid.UUID, db: psycopg.AsyncConnection) -> Reconcil
 
     reconciled = all_families_complete and no_critical_issues and zero_diff
 
+    manifest_citations = [
+        Citation(
+            source_id=manifest_source_id,
+            locator_id="text:l1-30",
+            label="Manifest Metadata",
+        )
+    ] if manifest_source_id else []
+
+    if not pending_citations and gross_citations:
+        pending_citations = [gross_citations[0]]
+
     # 8. Register immutable Fact records
     facts = [
         Fact(
@@ -477,6 +503,30 @@ async def reconcile(case_id: uuid.UUID, db: psycopg.AsyncConnection) -> Reconcil
             complete=True,
             citations=[],
             derivation={"reconciled": reconciled, "all_families_complete": all_families_complete},
+        ),
+        Fact(
+            fact_id="fact_as_of",
+            kind="date",
+            value=as_of.isoformat(),
+            complete=True,
+            citations=manifest_citations,
+            derivation={"as_of": as_of.isoformat()},
+        ),
+        Fact(
+            fact_id="fact_cohort_start",
+            kind="date",
+            value=case_row["cohort_start"].isoformat(),
+            complete=True,
+            citations=manifest_citations,
+            derivation={"cohort_start": case_row["cohort_start"].isoformat()},
+        ),
+        Fact(
+            fact_id="fact_cohort_end",
+            kind="date",
+            value=case_row["cohort_end"].isoformat(),
+            complete=True,
+            citations=manifest_citations,
+            derivation={"cohort_end": case_row["cohort_end"].isoformat()},
         ),
     ]
 
