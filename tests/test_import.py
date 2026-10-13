@@ -16,6 +16,7 @@ from psycopg import sql
 from moneytrail.config import Settings
 from moneytrail.db import get_reader_connection, get_writer_connection
 from moneytrail.ingest import compute_bundle_fingerprint, import_bundle, validate_bundle
+from moneytrail.retrieval import read_source, search_evidence
 from moneytrail.schemas import Manifest
 
 
@@ -51,11 +52,7 @@ async def test_import_is_atomic(test_settings: Settings):
     demo_zip = Path("fixtures/demo.zip")
     assert demo_zip.exists(), "fixtures/demo.zip must exist"
 
-    # 1. Verify index_not_ready guard
-    with pytest.raises(RuntimeError, match="INDEX_NOT_READY"):
-        await import_bundle(demo_zip, test_settings, indexer_fn=None)
-
-    # 2. Injected mid-import failure
+    # Injected mid-import failure
     with pytest.raises(RuntimeError, match="Simulated failure during document indexing"):
         await import_bundle(demo_zip, test_settings, indexer_fn=failing_indexer)
 
@@ -201,3 +198,64 @@ async def test_duplicates_and_conflicting_ids(tmp_path: Path):
     assert "Conflicting duplicate record ID 'O-001'" in err_msg
     assert "row 1" in err_msg
     assert "row 6" in err_msg
+
+
+@pytest.mark.asyncio
+async def test_import_with_real_indexer_and_locators(test_settings: Settings):
+    """
+    MT1.3: Import complete case with real document extraction/indexing;
+    verify record/chunk counts, idempotent re-import, locator inspection, and search.
+    """
+    demo_zip = Path("fixtures/demo.zip")
+    assert demo_zip.exists()
+
+    # 1. Full import with real indexer (indexer_fn=None uses index_sources)
+    res = await import_bundle(demo_zip, test_settings)
+    assert res.reused is False
+    assert res.status == "ready"
+    assert res.record_counts["orders"] == 5
+    assert res.record_counts["refunds"] == 3
+    assert res.record_counts["fees"] == 5
+    assert res.record_counts["payouts"] == 2
+    assert res.record_counts["payout_links"] == 4
+    assert res.record_counts["policies"] == 2
+    assert res.record_counts["chunks"] == 6
+
+    # 2. Idempotent re-import
+    re_res = await import_bundle(demo_zip, test_settings)
+    assert re_res.reused is True
+    assert re_res.case_id == res.case_id
+    assert re_res.record_counts == res.record_counts
+
+    # 3. Read and resolve source locators
+    reader_conn = await get_reader_connection(test_settings)
+    try:
+        # Get sources
+        cur = await reader_conn.execute("SELECT source_id, relative_name FROM sources WHERE case_id = %s", [res.case_id])
+        sources = {name: sid for sid, name in (await cur.fetchall())}
+
+        # CSV row locator
+        orders_sid = sources["orders.csv"]
+        seg_csv = await read_source(res.case_id, orders_sid, "csv:r1", test_settings, reader_conn)
+        assert "O-001" in seg_csv.text
+        assert seg_csv.metadata["values"]["gross_paise"] == "8000000"
+
+        # PDF metadata locator
+        pol_sid = sources["docs/policy-current.pdf"]
+        seg_pdf = await read_source(res.case_id, pol_sid, "pdf:p1:l1-6", test_settings, reader_conn)
+        assert "Policy-ID: POL-2026-09-CURRENT" in seg_pdf.text
+        assert "Settlement-Calendar-Days: 2" in seg_pdf.text
+
+        # Text line locator
+        note_sid = sources["docs/settlement-note.md"]
+        seg_txt = await read_source(res.case_id, note_sid, "text:l9-10", test_settings, reader_conn)
+        assert "P-001" in seg_txt.text
+        assert "P-002" in seg_txt.text
+
+        # 4. Search evidence
+        search_res = await search_evidence(res.case_id, "payout policy calendar days", kind="all", limit=4, settings=test_settings, db=reader_conn)
+        assert search_res.total > 0
+        assert search_res.items[0].locator_id.startswith("pdf:p1:")
+        assert search_res.items[0].kind == "policy"
+    finally:
+        await reader_conn.close()

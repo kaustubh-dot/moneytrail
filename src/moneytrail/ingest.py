@@ -707,9 +707,10 @@ async def import_bundle(
                     evidence_findings=[ef.model_dump() for ef in evidence_findings],
                 )
 
-        # 2. Check indexer readiness
+        # 2. Wire real indexer
         if indexer_fn is None:
-            raise RuntimeError("INDEX_NOT_READY: Document extraction and vector indexing pipeline is not ready")
+            from moneytrail.retrieval import index_sources
+            indexer_fn = index_sources
 
         # 3. Create staging directory
         import_id = uuid.uuid4()
