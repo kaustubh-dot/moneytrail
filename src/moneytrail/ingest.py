@@ -274,10 +274,17 @@ def validate_bundle(bundle_path: Path) -> dict[str, Any]:
             raise ValueError(f"Manifest declares files missing from ZIP: {missing_files}")
 
         # Require at least one policy PDF and at least one correspondence file
-        has_policy = any(f.kind == "policy" and f.path.endswith(".pdf") for f in manifest.files)
+        has_policy = any(
+            (f.kind == "policy" or (f.path.endswith(".pdf") and ("policy" in f.path.lower() or "pol" in f.path.lower())))
+            and f.path.endswith(".pdf")
+            for f in manifest.files
+        )
         if not has_policy:
             raise ValueError("Bundle must contain at least one policy PDF under docs/")
-        has_correspondence = any(f.kind == "correspondence" for f in manifest.files)
+        has_correspondence = any(
+            f.kind == "correspondence" or f.path.endswith((".txt", ".md"))
+            for f in manifest.files
+        )
         if not has_correspondence:
             raise ValueError("Bundle must contain at least one correspondence file")
 
@@ -301,9 +308,10 @@ def validate_bundle(bundle_path: Path) -> dict[str, Any]:
         # Deep validate policy PDFs and correspondence encoding
         for entry in manifest.files:
             p = entry.path.strip("/")
-            if entry.kind == "policy" and p.endswith(".pdf"):
+            is_policy_pdf = (entry.kind == "policy" or (p.endswith(".pdf") and ("policy" in p.lower() or "pol" in p.lower()))) and p.endswith(".pdf")
+            if is_policy_pdf:
                 _parse_policy_text(file_bytes_map[p], uuid.uuid4())
-            elif entry.kind == "correspondence":
+            elif entry.kind == "correspondence" and not p.endswith(".pdf"):
                 try:
                     file_bytes_map[p].decode("utf-8")
                 except UnicodeDecodeError as ue:
@@ -801,7 +809,9 @@ async def import_bundle(
 
                 # Extract published_at for documents if available
                 doc_pub_at = None
-                if entry.kind == "policy" and p.endswith(".pdf"):
+                is_policy_pdf = (entry.kind == "policy" or (p.endswith(".pdf") and ("policy" in p.lower() or "pol" in p.lower()))) and p.endswith(".pdf")
+                effective_kind = "policy" if is_policy_pdf else entry.kind
+                if is_policy_pdf:
                     try:
                         p_meta, _ = _parse_policy_text(content, source_id)
                         doc_pub_at = p_meta["published_at"]
@@ -825,7 +835,7 @@ async def import_bundle(
                     "relative_name": p,
                     "sha256": entry.sha256.lower(),
                     "media_type": media_type,
-                    "kind": entry.kind,
+                    "kind": effective_kind,
                     "published_at": doc_pub_at,
                     "internal_path": internal_path,
                     "aliases": json.dumps(aliases),
@@ -835,7 +845,8 @@ async def import_bundle(
             policy_records: list[dict[str, Any]] = []
             for entry in manifest.files:
                 p = entry.path.strip("/")
-                if entry.kind == "policy" and p.endswith(".pdf"):
+                is_policy_pdf = (entry.kind == "policy" or (p.endswith(".pdf") and ("policy" in p.lower() or "pol" in p.lower()))) and p.endswith(".pdf")
+                if is_policy_pdf:
                     content = file_bytes_map[p]
                     source_id = sources_by_rel_name[p]
                     pol_dict, locators = _parse_policy_text(content, source_id)

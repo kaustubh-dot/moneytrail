@@ -514,24 +514,28 @@ async def inspect_order(
                 label=f"Order {order_id} Row",
             )
         )
+    refund_cits: list[Citation] = []
     for r in order_refunds:
         if r["row_locators"]:
-            citations.append(
-                Citation(
-                    source_id=r["source_id"],
-                    locator_id=r["row_locators"][0],
-                    label=f"Refund {r['refund_id']}",
-                )
+            c = Citation(
+                source_id=r["source_id"],
+                locator_id=r["row_locators"][0],
+                label=f"Refund {r['refund_id']}",
             )
+            citations.append(c)
+            refund_cits.append(c)
+
+    fee_cits: list[Citation] = []
     for f in order_fees:
         if f["row_locators"]:
-            citations.append(
-                Citation(
-                    source_id=f["source_id"],
-                    locator_id=f["row_locators"][0],
-                    label=f"Fee {f['fee_id']}",
-                )
+            c = Citation(
+                source_id=f["source_id"],
+                locator_id=f["row_locators"][0],
+                label=f"Fee {f['fee_id']}",
             )
+            citations.append(c)
+            fee_cits.append(c)
+
     for lk in order_links:
         if lk["row_locators"]:
             citations.append(
@@ -554,6 +558,26 @@ async def inspect_order(
             derivation={"order_id": order_id},
         ),
         Fact(
+            fact_id=f"fact_{order_id}_refunds",
+            kind="money",
+            value=completed_refunds,
+            value_paise=completed_refunds,
+            currency="INR",
+            complete=True,
+            citations=refund_cits,
+            derivation={"order_id": order_id, "refunds_count": len(order_refunds)},
+        ),
+        Fact(
+            fact_id=f"fact_{order_id}_fees",
+            kind="money",
+            value=assessed_fees,
+            value_paise=assessed_fees,
+            currency="INR",
+            complete=True,
+            citations=fee_cits,
+            derivation={"order_id": order_id, "fees_count": len(order_fees)},
+        ),
+        Fact(
             fact_id=f"fact_{order_id}_net",
             kind="money",
             value=expected_net_paise,
@@ -569,6 +593,19 @@ async def inspect_order(
             },
         ),
     ]
+    if order_row["settlement_state"] == "pending":
+        facts.append(
+            Fact(
+                fact_id=f"fact_{order_id}_pending",
+                kind="money",
+                value=expected_net_paise,
+                value_paise=expected_net_paise,
+                currency="INR",
+                complete=True,
+                citations=citations[:1],
+                derivation={"order_id": order_id, "settlement_state": "pending"},
+            )
+        )
 
     return OrderEvidence(
         order_id=order_id,
@@ -927,9 +964,14 @@ async def dispatch_tool(
             )
 
         elif action == "inspect_order":
-            if not call.order_id or not call.order_id.strip():
+            order_id = call.order_id
+            if (not order_id or not order_id.strip()) and call.query:
+                m = re.search(r"O-[A-Za-z0-9-]+", call.query)
+                if m:
+                    order_id = m.group(0)
+            if not order_id or not order_id.strip():
                 raise ValueError("MISSING_ARGUMENT: inspect_order requires a non-empty order_id")
-            order_ev = await inspect_order(case_id, call.order_id.strip(), db)
+            order_ev = await inspect_order(case_id, order_id.strip(), db)
             elapsed_ms = int((time.perf_counter() - t0) * 1000)
             return ToolResult(
                 tool_call_id=call_id,
@@ -942,9 +984,14 @@ async def dispatch_tool(
             )
 
         elif action == "select_policy":
-            if call.order_ids is not None and len(call.order_ids) > 20:
+            order_ids = call.order_ids
+            if not order_ids and call.query:
+                found = re.findall(r"O-[A-Za-z0-9-]+", call.query)
+                if found:
+                    order_ids = found
+            if order_ids is not None and len(order_ids) > 20:
                 raise ValueError("RESULT_LIMIT: Explicit order_ids list exceeds maximum limit of 20")
-            pol_ev = await select_policy(case_id, call.order_ids, db)
+            pol_ev = await select_policy(case_id, order_ids, db)
             elapsed_ms = int((time.perf_counter() - t0) * 1000)
             return ToolResult(
                 tool_call_id=call_id,

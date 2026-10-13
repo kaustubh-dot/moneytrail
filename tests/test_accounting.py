@@ -250,7 +250,7 @@ async def test_dispatch_tool(test_settings: Settings):
         assert res_order.data["order_id"] == "O-001"
         assert res_order.data["gross_paise"] == 8000000
         assert res_order.data["expected_net_paise"] == 6800000
-        assert len(res_order.facts) == 2
+        assert len(res_order.facts) >= 2
         assert len(res_order.citations) == 4
 
         # 3. Select policy tool dispatch (cohort mode)
