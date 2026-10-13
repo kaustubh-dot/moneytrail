@@ -25,7 +25,7 @@ required_citations, critical_document_ids, expected_tool_capabilities,
 rubric_notes, gold_version
 ```
 
-`required_fact_values` is a mapping of semantic fact keys to integer paise/date/rate values plus completeness flags. `required_citations` contains source filename/hash and locator ranges; `critical_document_ids` names document evidence required for the explanation, excluding structured CSV records queried through SQL. `expected_tool_capabilities` describes necessary evidence access, not a single mandatory sequence. `setup_actions` is a closed list of `import` or `reimport_same_bundle`; it cannot execute scripts. Gold labels and questions are never imported into the document corpus or placed in model context.
+`required_fact_values` is a mapping of semantic fact keys to integer paise/date/rate values plus completeness flags. `required_citations` contains source filename/hash and locator ranges; `critical_document_ids` names document evidence required for the explanation, excluding structured CSV records queried through SQL. `expected_tool_capabilities` describes necessary evidence access, not a single mandatory sequence. `setup_actions` is a closed list of `import` or `reimport_same_bundle`; it cannot execute scripts. Gold labels never enter the document corpus or model context. Questions enter only as the current request/search query, never as indexed answer-bearing documents.
 
 Before phase 5 scoring, manually verify every gold monetary value with a second explicit calculation recorded alongside the label and verify PDF/text locators using the source viewer. The fixture generator must not produce gold values by simply calling the production reconciliation function. Check the sample manually: `24,000,000 − 1,800,000 − 600,000 − 3,000,000 = 18,600,000` paise.
 
@@ -43,13 +43,13 @@ The owner may approve a documented different timeout/budget or model candidate i
 
 ## Retrieval measurements
 
-For every question with at least one labelled critical document, compute candidate recall after fusion at 20 unique chunks and final document recall after reranking/context selection at six chunks. A document is retrieved if at least one relevant gold locator is represented, not merely any unrelated page from the same file. Collapse repeated overlapping chunks before counting. Required policy conflicts count each applicable conflicting source separately.
+For every question with at least one labelled critical document, run one standalone `search_evidence(case_id, query=question, kind="all", limit=6)` using the locked ranking configuration. Use the original question without model rewriting, gold hints, or follow-up searches. Compute candidate recall from that search's fused top 20 unique chunks and final document recall from its reranked/context-selected top six chunks only. Do not credit documents found by `select_policy`, SQL tools, or other workflow calls. A document is retrieved if at least one relevant gold locator is represented, not merely any unrelated page from the same file. Collapse repeated overlapping chunks before counting. Required policy conflicts count each applicable conflicting source separately.
 
 `critical_document_recall = retrieved critical (eval_id, document_id) pairs / all labelled critical (eval_id, document_id) pairs`
 
 Print numerator, denominator, number of eligible questions, and the excluded zero-document questions. Do not divide by 18 when fewer questions need documents, or claim 100% from zero eligible examples. Report per-family values as well as the pooled value. A question with an essential missing document in reality has a gap label; an absent document is not placed in the retrieval denominator as though it were available.
 
-Final gates: candidate recall at 20 is at least 0.95; final document recall at six is at least 0.90; every deliberately conflicting policy version required by a scored conflict case is present in the result evidence. Report lexical-only, dense-only, fused, and reranked results on the same corpus to show what each addition changes. These retrieval checks require the pinned embedding/reranking models but do not require generative inference and are separate from ordinary offline CI.
+Final retrieval gates: candidate recall at 20 is at least 0.95; final document recall at six is at least 0.90. Report lexical-only, dense-only, fused, and reranked results on the same questions and corpus, with the same `kind="all"` filter, to show what each addition changes. These retrieval checks require the pinned embedding/reranking models but do not require generative inference and are separate from ordinary offline CI. Separately check that every deliberately conflicting policy version required by a scored conflict case is present in the investigation's result evidence; deterministic policy selection may satisfy this policy-coverage check but never increases the standalone retrieval score.
 
 ## Paired fixed-workflow and bounded-agent evaluation
 

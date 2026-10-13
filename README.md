@@ -10,6 +10,8 @@ Private repository: [kaustubh-dot/moneytrail](https://github.com/kaustubh-dot/mo
 
 A fictional merchant can import a supported case bundle, ask a natural-language question, inspect the resulting investigation, and follow each material claim back to its evidence. The LLM selects and interprets evidence; Python and SQL compute financial amounts. Missing evidence remains missing rather than becoming a plausible invented explanation.
 
+Questions cover cohort reconciliation, timing/fee/refund explanations, policy/correspondence evidence, and explicitly identified orders in the imported snapshot. Free wording is supported; arbitrary filtered analytics and exhaustive order rankings/lists are not.
+
 The headline demonstration is a synthetic case with INR 240,000 in gross sales and INR 186,000 received: the system investigates refunds, fees, and genuinely evidenced pending settlements. The gap is not automatically classified as pending money. The financial identity and source-of-truth rules live in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 Planned capabilities:
@@ -68,7 +70,7 @@ This sequence is a delivery target, not a claim that a demo already exists:
 2. Import the included synthetic merchant case.
 3. Ask why the sales total differs from received payments.
 4. Inspect the monetary breakdown, transaction rows, policy version, and citations.
-5. Ask which pending settlements are overdue as of the case's cutoff date.
+5. Choose a pending order ID from the source viewer and ask how its records and applicable policy explain its settlement timing at the case's cutoff.
 6. Open a case with missing or conflicting evidence and show the explicit limitation.
 7. Show one evaluation comparison and a trace explaining a real implementation failure and its fix.
 

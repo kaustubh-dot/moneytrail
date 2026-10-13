@@ -83,11 +83,18 @@ Planning audit, 2026-10-13: verified seven phases, 24 roadmap tasks represented 
 
 ## Decision and deviation log
 
-No post-baseline decision or scope deviation is recorded. Baseline decisions/references live in ARCHITECTURE. Future material changes must record date, PRD IDs, reason, alternatives, effect on data/API/evaluation/cost, explicit approval evidence, and synchronized files. Do not silently change the model/provider, accounting contract, formats, or original vision.
+Approved-amendment audit, 2026-10-13: `git diff --check` passed. Read-only document checks confirmed only the six intended Markdown files changed, all requirement rows except the approved MT-05 measurement clarification remained identical, all 24 task IDs remain represented, and local links/configuration references resolve. The diff preserves the original financial workflow, budgets, evaluation sizes/thresholds, and essential regression coverage. No application tests were added or run; implementation remains unstarted.
+
+Approved pre-lock amendments, 2026-10-13:
+
+- MT-05/MT-12: make ranking evaluation one standalone original-question, `kind="all"` search per eligible question/configuration. Score only ranked results; retain investigation policy-conflict coverage separately. This removes scoring ambiguity without changing thresholds, datasets, runtime tools, or infrastructure.
+- MT-04/MT-08/MT-10: explicitly bound free-text questions to cohort reconciliation, timing/fee/refund explanations, policy/correspondence evidence, and identified orders. Align the demo; unsupported analytics/snapshots return insufficiency. Narrow the promise instead of adding analytics tools. Import, deterministic money, deep RAG, evidence, and the bounded investigator remain unchanged.
+
+PRD, ARCHITECTURE, EVALUATION, ROADMAP, and README are synchronized with these decisions. Baseline decisions/references otherwise remain unchanged. Future material changes require the reason, alternatives, requirement/API/evaluation/cost impact, and explicit approval; do not silently change the model/provider, accounting contract, formats, or original vision.
 
 ## Approval ledger
 
-No implementation-start or phase approvals are recorded. Append real approvals and their exact scope/date when received. Documentation/scaffold creation is not approval to execute all phases.
+2026-10-13: the user approved the three pre-lock amendments across the two flagship projects: “Approved but ensure you dont overengineer , overdo and drift apart from the original intended vision”. For this repository the approval covers only the two amendments above and corresponding documentation alignment. No implementation-start or phase approval is recorded; G0 feasibility remains unverified. Append actual phase approvals separately.
 
 ## Parked work
 

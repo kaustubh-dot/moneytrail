@@ -223,7 +223,7 @@ uv run --env-file .env --env-file .env.setup pytest tests/test_workflow.py -q
 
 1. Implement exact dense and full-text top-20 candidates, case/publication filters, stable ties, RRF constant 60, deduplication, cross-encoder reranking of 20 fused candidates, and at most six selected chunks.
 2. Return ranking metadata for trace/evaluation. Keep policy applicability/conflict selection independent of relevance ranking.
-3. Add deterministic candidate/locator regression without model download in CI. Measure actual locked embedding/reranking models on development data, printing explicit numerator/denominator and eligible questions.
+3. Add deterministic candidate/locator regression without model download in CI. Measure actual locked embedding/reranking models on development data using EVALUATION's standalone original-question, `kind="all"` search protocol. Print explicit numerator/denominator and eligible questions; never credit independently selected policies to retrieval recall.
 
 ```bash
 uv run --env-file .env --env-file .env.setup pytest tests/test_retrieval.py -q
@@ -356,7 +356,7 @@ uv run python -m moneytrail.evaluation freeze --output evals/reports/freeze.json
 **PRD:** MT-05, MT-06, MT-08, MT-12, MT-13, MT-14. **Depends:** MT5.1. **Files:** Produce `evals/reports/final.json`/retrieval report via evaluation.py; bulky raw traces stay ignored. **Interfaces:** `paired --split test --freeze PATH` alternates mode order and captures both outputs.
 
 1. Warm the locked model as recorded and run all 18 fixed/18 agent cases with identical frozen inputs. Keep errors; measure real latency/tool counts/tokens.
-2. Measure held-out retrieval using the same corpus/revisions and retain explicit numerator/denominator, eligible cases, and policy-conflict source checks.
+2. Measure held-out retrieval using the same corpus/revisions and EVALUATION's standalone original-question, `kind="all"` protocol. Retain explicit numerator/denominator and eligible cases. Report investigation policy-conflict coverage separately from ranking recall.
 3. Review every narrative against source/gold and record support/outcome decisions. Even one incorrect/fabricated returned monetary claim or material unauthorized access is a hard failure.
 
 ```bash
