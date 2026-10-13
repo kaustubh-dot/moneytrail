@@ -14,6 +14,7 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 import psycopg
 from psycopg import sql
 from psycopg.rows import dict_row
@@ -690,6 +691,9 @@ def create_app(custom_settings: Settings | None = None) -> FastAPI:
         finally:
             await conn.close()
 
+    frontend_dist = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+    if frontend_dist.exists() and (frontend_dist / "index.html").exists():
+        app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")
 
     return app
 

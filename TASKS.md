@@ -6,9 +6,9 @@ Updated 2026-10-13. Current state: documentation-only planning pack. Application
 
 ## Current position and next action
 
-Current phase: **Phase 2 — Complete first investigation workflow**. Exact next task: **MT2.4 — Complete upload/question/result/source UI and first live demo**. Batch implementation authorization recorded.
+Current phase: **Phase 2 — Complete first investigation workflow**. Exact next task: **Phase 2 Review and Gate G2**. Batch implementation authorization recorded.
 
-Phase 1 completed and accepted via automated review-and-fix gate G1 (candidate 8286e98, verdict PASS). Phase 2 in progress (MT2.1, MT2.2, MT2.3 completed).
+Phase 1 completed and accepted via automated review-and-fix gate G1 (candidate 8286e98, verdict PASS). Phase 2 tasks MT2.1, MT2.2, MT2.3, MT2.4 complete; ready for independent Phase 2 reviewer.
 
 ## Canonical task list
 
@@ -32,7 +32,7 @@ A checkbox means the deliverable and minimal verification passed and evidence wa
 - [x] **MT2.1** Implement integer reconciliation and record inspection. PRD: MT-03, MT-04, MT-06. Depends on G1 approval.
 - [x] **MT2.2** Resolve effective policies and validate grounded result facts/citations. PRD: MT-02, MT-06, MT-07. Depends on MT2.1.
 - [x] **MT2.3** Run live fixed investigations through authenticated APIs. PRD: MT-04, MT-06, MT-08, MT-09, MT-14. Depends on MT2.2.
-- [ ] **MT2.4** Complete upload/question/result/source UI and first live demo. PRD: MT-01, MT-02, MT-10, MT-11, MT-14. Depends on MT2.3.
+- [x] **MT2.4** Complete upload/question/result/source UI and first live demo. PRD: MT-01, MT-02, MT-10, MT-11, MT-14. Depends on MT2.3.
 
 ### Phase 3 — Hybrid retrieval and richer evidence access
 
@@ -75,6 +75,7 @@ Implementation-start authorization: **Recorded (explicit batch authorization for
 
 ## Verification and checkpoint ledger
  
+- **MT2.4 (2026-10-14)**: Built React + Vite + TypeScript owner UI in `frontend/` featuring owner-token authentication (in-memory only, no localStorage leak), case bundle upload/selection with completeness badges (`ImportPanel.tsx`), natural-language investigation query input with live progress/cancellation and financial reconciliation display (`InvestigationPanel.tsx`), evidence segment viewer with revocable PDF blob URLs and line/row highlight (`SourceViewer.tsx`), and real-time execution trace event log (`RunTrace.tsx`). Built static distribution and served from FastAPI at `/` (`src/moneytrail/api.py`). Executed `npm --prefix frontend run typecheck` (passed, 0 errors), `npm --prefix frontend run build` (built in 315ms), and verified workflow suite `pytest tests/test_workflow.py -q` (4 passed) and full suite (26 passed). Next action: Phase 2 Review and Gate G2.
 - **MT2.3 (2026-10-14)**: Implemented fixed baseline investigation orchestration in `src/moneytrail/agent.py` (`run_fixed`, `assemble_context`, token budgeting with Qwen tokenizer, and reflection retry loop for ungrounded currency/citations) and authenticated lifecycle endpoints in `src/moneytrail/api.py` (`POST /api/v1/investigations` with 202 or 409 `RUN_BUSY`, `GET /api/v1/runs/{run_id}`, `GET /api/v1/runs/{run_id}/events`, `POST /api/v1/runs/{run_id}/cancel`, startup cleanup for interrupted runs). Added CLI subparser `run` in `src/moneytrail/evaluation.py`. Implemented comprehensive tests in `tests/test_workflow.py` (offline HTTP lifecycle, cancellation/terminal lock, offline provider failure, live fixed demo investigation). Executed `pytest tests/test_workflow.py -v` (4 passed), full evaluation across dev split `python -m moneytrail.evaluation run --split dev --mode fixed` (12/12 cases passed, 0 currency hallucinations, output saved to `evals/reports/dev_fixed.jsonl`), and full test suite `pytest -v` (26 passed). Next action: MT2.4 — Complete upload/question/result/source UI and first live demo.
 - **MT2.2 (2026-10-14)**: Implemented `src/moneytrail/tools.py` (`select_policy`) with cohort grouping (`order_ids=None`) and explicit order selection (<= 20 orders), publication cutoff filtering (`published_at < as_of`), effective interval matching (`effective_from <= date < effective_to`), conflict detection (`POLICY_CONFLICT`), and metadata citations. Began `src/moneytrail/agent.py` with `format_paise` (exact integer math without floating-point conversion), `expand_fact_tokens`, `check_currency_literals` (blocking raw currency numbers outside fact tokens), `validate_citations`, and `validate_result` (downgrading `explained` to `partial` upon critical findings/unresolved gaps, never upgrading model uncertainty). Implemented `tests/test_policy.py` and `tests/test_answer.py`. Executed `pytest tests/test_policy.py tests/test_answer.py -v` (13 passed) and full suite (22 passed). Next action: MT2.3 — Run live fixed investigations through authenticated APIs.
 - **MT2.1 (2026-10-14)**: Implemented `src/moneytrail/tools.py` with integer-paise cohort reconciliation (`reconcile`) and single-order record inspection (`inspect_order`). Handled strict exclusive cutoff (`< as_of`), completed refund deductions, assessed fees, effective payout link allocations, payout header vs link validation, independent pending classification, and signed unexplained difference. Implemented `tests/test_accounting.py` testing exact demo totals `(24000000, 1800000, 600000, 3000000, 18600000, 0)`, cutoff exclusion boundaries, and missing link non-pending gap behavior. Executed `pytest tests/test_accounting.py -q` (3 passed). Next action: MT2.2 — Resolve effective policies and validate grounded result facts/citations.

@@ -22,7 +22,18 @@ export interface CaseSummary {
   cohort_end: string;
   as_of: string;
   status: 'ready' | 'ready_with_gaps';
+  completeness: CompletenessDeclaration;
   imported_at: string;
+  source_count?: number;
+}
+
+export interface SourceSummary {
+  source_id: string;
+  relative_name: string;
+  media_type: string;
+  kind: string;
+  sha256: string;
+  size_bytes: number;
 }
 
 export interface Citation {
@@ -44,6 +55,7 @@ export interface Fact {
 
 export interface Claim {
   text_template: string;
+  text?: string | null;
   fact_ids: string[];
   citations: Citation[];
 }
@@ -56,6 +68,18 @@ export interface EvidenceGap {
 
 export type OutcomeState = 'explained' | 'partial' | 'insufficient';
 
+export interface ReconciliationTotals {
+  gross_paise: number;
+  completed_refunds_paise: number;
+  assessed_fees_paise: number;
+  expected_net_paise: number;
+  received_allocations_paise: number;
+  documented_pending_paise: number;
+  unexplained_difference_paise: number;
+  reconciled: boolean;
+  order_counts?: Record<string, number>;
+}
+
 export interface InvestigationResult {
   run_id: string;
   case_id: string;
@@ -65,15 +89,55 @@ export interface InvestigationResult {
   outcome: OutcomeState;
   claims: Claim[];
   selected_facts: Fact[];
-  reconciliation?: {
-    gross_paise: number;
-    completed_refunds_paise: number;
-    assessed_fees_paise: number;
-    received_allocations_paise: number;
-    documented_pending_paise: number;
-    unexplained_difference_paise: number;
-    reconciled: boolean;
-  } | null;
+  reconciliation?: ReconciliationTotals | null;
   citations: Citation[];
   unresolved: EvidenceGap[];
+  budget_summary?: Record<string, unknown>;
+  trace_summary?: Record<string, unknown>;
+}
+
+export interface RunEvent {
+  run_id: string;
+  sequence: number;
+  timestamp: string;
+  kind: string;
+  elapsed_ms: number;
+  payload: Record<string, unknown>;
+}
+
+export interface RunStateResponse {
+  run_id: string;
+  case_id: string;
+  state: 'running' | 'completed' | 'failed' | 'cancelled';
+  result?: InvestigationResult | null;
+  error?: { code: string; message: string; details?: Record<string, unknown> } | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+}
+
+export interface RunEventsResponse {
+  events: RunEvent[];
+  next_after: number;
+  terminal: boolean;
+}
+
+export interface SourceSegment {
+  source_id: string;
+  locator_id: string;
+  media_type: string;
+  content: string;
+  line_start?: number | null;
+  line_end?: number | null;
+  page?: number | null;
+  row_index?: number | null;
+}
+
+export interface ImportResult {
+  reused: boolean;
+  case_id: string;
+  case_key: string;
+  bundle_sha256: string;
+  orders_count: number;
+  sources_count: number;
+  status: string;
 }
