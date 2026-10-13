@@ -327,7 +327,7 @@ async def test_dispatch_tool(test_settings: Settings):
             w_conn = await get_writer_connection(test_settings)
             try:
                 async with w_conn.cursor() as cur:
-                    await cur.execute("DELETE FROM fees WHERE case_id = %s AND fee_id LIKE 'F-OVERFLOW-%';", [case_id])
+                    await cur.execute("DELETE FROM fees WHERE case_id = %s AND fee_id LIKE %s;", [case_id, "F-OVERFLOW-%"])
                 await w_conn.commit()
             finally:
                 await w_conn.close()
