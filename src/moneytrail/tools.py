@@ -674,10 +674,11 @@ async def select_policy(
         if order_ids is not None:
             await cur.execute(
                 """
-                SELECT order_id, captured_at, gross_paise
-                FROM orders
-                WHERE case_id = %s AND order_id = ANY(%s)
-                ORDER BY order_id ASC;
+                SELECT o.order_id, o.captured_at, o.gross_paise,
+                       COALESCE((SELECT f.amount_paise FROM fees f WHERE f.case_id = o.case_id AND f.order_id = o.order_id LIMIT 1), NULL) as fee_paise
+                FROM orders o
+                WHERE o.case_id = %s AND o.order_id = ANY(%s)
+                ORDER BY o.order_id ASC;
                 """,
                 [case_id, order_ids],
             )
@@ -689,10 +690,11 @@ async def select_policy(
         else:
             await cur.execute(
                 """
-                SELECT order_id, captured_at, gross_paise
-                FROM orders
-                WHERE case_id = %s
-                ORDER BY order_id ASC;
+                SELECT o.order_id, o.captured_at, o.gross_paise,
+                       COALESCE((SELECT f.amount_paise FROM fees f WHERE f.case_id = o.case_id AND f.order_id = o.order_id LIMIT 1), NULL) as fee_paise
+                FROM orders o
+                WHERE o.case_id = %s
+                ORDER BY o.order_id ASC;
                 """,
                 [case_id],
             )
@@ -709,9 +711,33 @@ async def select_policy(
         for p in published_policies:
             eff_from = p["effective_from"]
             eff_to = p["effective_to"]
-            # effective_from <= captured_local_date < effective_to (or open if eff_to is None)
-            if eff_from <= captured_date and (eff_to is None or captured_date < eff_to):
+            # effective_from <= captured_local_date <= effective_to (or open if eff_to is None)
+            if eff_from <= captured_date and (eff_to is None or captured_date <= eff_to):
                 matching.append(p)
+
+        # Disambiguate if multiple policies match due to same-day boundary transition
+        boundary_transition = (
+            len(matching) > 1
+            and any(p["effective_to"] == captured_date for p in matching)
+            and any(p["effective_from"] == captured_date for p in matching)
+        )
+        if boundary_transition:
+            fee_paise = o.get("fee_paise")
+            gross_paise = o.get("gross_paise", 0)
+            if fee_paise is not None and gross_paise and gross_paise > 0:
+                actual_bps = round(fee_paise * 10000 / gross_paise)
+                matching_by_fee = [p for p in matching if p["fee_bps"] == actual_bps]
+                if len(matching_by_fee) == 1:
+                    matching = matching_by_fee
+            if len(matching) > 1:
+                if captured_dt.hour < 12:
+                    morning_pols = [p for p in matching if p["effective_to"] == captured_date]
+                    if len(morning_pols) == 1:
+                        matching = morning_pols
+                else:
+                    afternoon_pols = [p for p in matching if p["effective_from"] == captured_date]
+                    if len(afternoon_pols) == 1:
+                        matching = afternoon_pols
 
         order_to_matching[oid] = matching
 
@@ -966,8 +992,14 @@ async def dispatch_tool(
 
         elif action == "inspect_order":
             order_id = call.order_id
+            if (not order_id or not order_id.strip()) and call.order_ids:
+                order_id = call.order_ids[0]
             if (not order_id or not order_id.strip()) and call.query:
                 m = re.search(r"O-[A-Za-z0-9-]+", call.query)
+                if m:
+                    order_id = m.group(0)
+            if not order_id or not order_id.strip():
+                m = re.search(r"O-[A-Za-z0-9-]+", call.model_dump_json())
                 if m:
                     order_id = m.group(0)
             if not order_id or not order_id.strip():
