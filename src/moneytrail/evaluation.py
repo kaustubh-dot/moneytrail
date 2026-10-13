@@ -1803,7 +1803,7 @@ async def run_paired_async(
             async with await get_reader_connection(settings) as reader_conn:
                 async with reader_conn.cursor() as cur:
                     await cur.execute(
-                        "SELECT source_id, original_path, media_type FROM sources WHERE case_id = %s;",
+                        "SELECT source_id, relative_name, media_type FROM sources WHERE case_id = %s;",
                         [case_id],
                     )
                     s_rows = await cur.fetchall()
