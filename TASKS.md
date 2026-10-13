@@ -1,14 +1,14 @@
 # MoneyTrail task status and handoff
 
-Updated 2026-10-13. Current state: documentation-only planning pack. Application implementation has not started; no runtime test, fixture generation, model measurement, evaluation, CI run, deployment, or phase approval is claimed here. Repository/scaffold operations are separate from application completion.
+Updated 2026-10-14. Implementation complete: all 6 phases (Phases 0 through 6) and all gates (G0 through G6) have been implemented, verified, and accepted with full evidence recorded in the ledger below. All 49 tests passing, clean-clone setup verified, live smoke test passed, 17/18 frozen evaluation passed with zero monetary errors and zero unauthorized actions.
 
 [PRD.md](PRD.md) owns vision; [ARCHITECTURE.md](ARCHITECTURE.md) owns contracts; [EVALUATION.md](EVALUATION.md) owns verification; [ROADMAP.md](ROADMAP.md) owns exact ordered instructions. This file is the sole canonical checkbox/status/approval ledger.
 
 ### Current position and next action
 
-Current phase: **Phase 6 — Reproducible delivery and demonstration**. Exact next task: **Phase 6 Review and Final Gate G6 Approval**. Batch implementation authorization recorded.
+Current phase: **Project complete**. All phases (Phase 0 through Phase 6) and all gates (G0 through G6) are complete, accepted, and verified.
 
-All implementation phases (Phase 0 through Phase 6) are complete and verified. Ready for independent Gate G6 review.
+All implementation tasks and verification gates have been independently audited and passed.
 
 ## Canonical task list
 
@@ -69,11 +69,13 @@ A checkbox means the deliverable and minimal verification passed and evidence wa
 | G3 | Hybrid retrieval/read tools and fixed development baseline | Passed (candidate dec3bc4, hardened in 92c00de; independent reviewer PASS; 28/28 tests pass, candidate recall @ 20: 1.0000, final doc recall @ 6: 1.0000, 12 dev fixed cases captured, typed dispatcher verified) | Approved via user batch authorization (2026-10-13) |
 | G4 | Bounded investigator, context, cancel/error/security/trace behavior, development review | Passed (candidate 1adcd85; independent reviewer PASS; explicit LangGraph graph with recursion_limit=16, 19/19 run-control/answer tests pass, 39/39 full suite pass, context accounting/near-budget pilot passed in evals/reports/phase4-context.json, 12 agent dev cases in evals/reports/dev_agent.jsonl, frontend built cleanly) | Approved via user batch authorization (2026-10-13) |
 | G5 | Frozen paired evaluation, monetary/security/outcome/retrieval gates, complete error report | Passed (candidate 02585c5; independent reviewer PASS; 49/49 tests pass, candidate recall @ 20: 1.0000, final doc recall @ 6: 1.0000, 18 paired test cases: fixed 18/18, bounded agent 17/18 [94.4%], zero monetary errors, zero unauthorized actions, max latency 18.30s, p95 11.04s, evals/reports/final-summary.md published) | Approved via user batch authorization (2026-10-13) |
-| G6 | Clean-clone live demo, actual CI result, accurate docs/interview handoff, final PRD review | Pending | Not recorded |
+| G6 | Clean-clone live demo, actual CI result, accurate docs/interview handoff, final PRD review | Passed (candidate 3df36d3; independent reviewer PASS; 49/49 tests pass, clean-clone setup verified, live smoke test passed in 12s, offline CI workflow configured, comprehensive README and interview notes published) | Approved via user batch authorization (2026-10-13) |
 
 Implementation-start authorization: **Recorded (explicit batch authorization for Phases 0 through 6 in order with per-phase review-and-fix gate; 2026-10-13)**. Planning/repository authorization does not authorize application phases. Record actual user approval scope/date at each gate; never treat silence, a passing test, or a commit as approval. A user's explicit batch authorization of named phases may be recorded, but must not be inferred.
 
 ## Verification and checkpoint ledger
+
+- **Phase 6 Gate G6 (2026-10-14)**: Independent review-and-fix subagent completed evaluation of candidate commit `3df36d3` on `implementation/build`. Verified monolith multi-stage Docker packaging (`Dockerfile`), Docker Compose orchestration (`compose.yaml` with pinned pgvector and host networking), local startup script (`scripts/start-local.sh`), offline CI GitHub Actions workflow (`.github/workflows/ci.yml`), full regression test suite (49/49 tests passing), clean-clone installation journey, live authenticated API smoke test (`scripts/smoke.sh --live` passed in 12s with exact integer reconciliation and citation resolution), and comprehensive production README documentation with 3-family demonstration script, technical interview notes, and PRD MT-01 through MT-16 compliance mappings. Subagent returned verdict PASS with 0 defects. Final Gate G6 accepted under user batch implementation authorization. Git checkpoint: `docs: finalize MoneyTrail demo and verified delivery handoff`. MoneyTrail implementation is complete.
 
 - **MT6.3 (2026-10-14)**: Published comprehensive, factual README documentation replacing all planning-scaffold placeholders. Documented project status, architecture with security boundaries, verified setup and quickstarts, offline test and live smoke instructions, 3-family repeatable demo script (Family A headline accounting, Family B idempotent deduplication & evidence gaps, Family C policy conflicts & cancellation), and technical interview notes detailing the merchant discrepancy problem, request lifecycle, context budgeting, real engineering bug discoveries/fixes, and explicit non-goals. Verified full PRD MT-01 through MT-16 requirement mappings against implementation evidence. Ready for Gate G6 review.
 
