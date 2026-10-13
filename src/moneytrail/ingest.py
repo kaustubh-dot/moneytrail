@@ -812,6 +812,40 @@ async def import_bundle(
                     row = await cur.fetchone()
                     counts[tbl] = row["c"] if row else 0
 
+                # Ensure manifest.json is present in sources table for cited metadata
+                await cur.execute(
+                    "SELECT source_id FROM sources WHERE case_id = %s AND relative_name = 'manifest.json'",
+                    [case_id],
+                )
+                m_row = await cur.fetchone()
+                if not m_row and "manifest.json" in file_bytes_map:
+                    m_content = file_bytes_map["manifest.json"]
+                    m_sha = hashlib.sha256(m_content).hexdigest()
+                    m_source_id = uuid.uuid4()
+                    published_sources_dir = settings.data_dir / "sources" / str(case_id)
+                    published_sources_dir.mkdir(parents=True, exist_ok=True)
+                    (published_sources_dir / "manifest.json").write_bytes(m_content)
+                    await cur.execute(
+                        """
+                        INSERT INTO sources (
+                            source_id, case_id, relative_name, sha256, media_type,
+                            kind, published_at, internal_path, aliases
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb);
+                        """,
+                        [
+                            m_source_id,
+                            case_id,
+                            "manifest.json",
+                            m_sha,
+                            "application/json",
+                            "manifest",
+                            manifest.as_of,
+                            (published_sources_dir / "manifest.json").as_posix(),
+                            json.dumps([]),
+                        ],
+                    )
+                    await writer_conn.commit()
+
                 return ImportResult(
                     case_id=case_id,
                     status=existing["status"],
@@ -888,6 +922,24 @@ async def import_bundle(
                     "published_at": doc_pub_at,
                     "internal_path": internal_path,
                     "aliases": json.dumps(aliases),
+                })
+
+            if "manifest.json" in file_bytes_map and "manifest.json" not in sources_by_rel_name:
+                m_content = file_bytes_map["manifest.json"]
+                m_source_id = uuid.uuid4()
+                sources_by_rel_name["manifest.json"] = m_source_id
+                (staging_dir / "manifest.json").write_bytes(m_content)
+                m_sha = hashlib.sha256(m_content).hexdigest()
+                source_records.append({
+                    "source_id": m_source_id,
+                    "case_id": case_id,
+                    "relative_name": "manifest.json",
+                    "sha256": m_sha,
+                    "media_type": "application/json",
+                    "kind": "manifest",
+                    "published_at": manifest.as_of,
+                    "internal_path": (published_sources_dir / "manifest.json").as_posix(),
+                    "aliases": json.dumps([]),
                 })
 
             # Parse policies

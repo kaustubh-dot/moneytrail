@@ -572,6 +572,26 @@ def assemble_context(
             "so that fees.csv and the underlying records are evidenced.\n\n"
         )
 
+    conflict_directive = ""
+    conflicts = [f for f in state.findings if f.get("code") == "POLICY_CONFLICT"]
+    if conflicts:
+        pol_names = []
+        for c in conflicts:
+            pols = c.get("details", {}).get("policies", [])
+            for p in pols:
+                if isinstance(p, dict) and "policy_id" in p:
+                    pol_names.append(p["policy_id"])
+        if pol_names:
+            unique_pols = sorted(list(set(pol_names)))
+            conflict_tokens = [f"{{{{fact:fact_{p.lower()}_fee_rate}}}}" for p in unique_pols]
+            conflict_directive = (
+                f"=== POLICY CONFLICT DETECTED ({', '.join(unique_pols)}) ===\n"
+                f"There is a policy conflict between policies: {', '.join(unique_pols)}. "
+                "Per Rule 4, you MUST state that policies conflict and cite the differing rates of ALL conflicting policies "
+                f"using their respective fact tokens ({' and '.join(conflict_tokens)}), "
+                "with outcome='partial' and an EvidenceGap with code='POLICY_CONFLICT'.\n\n"
+            )
+
     mandatory_user_text = (
         case_header
         + reconciliation_section
@@ -584,6 +604,7 @@ def assemble_context(
         + out_of_cohort_directive
         + order_grounding_directive
         + incomplete_directive
+        + conflict_directive
         + fee_grounding_directive
     )
 
