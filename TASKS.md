@@ -6,7 +6,7 @@ Updated 2026-10-13. Current state: documentation-only planning pack. Application
 
 ## Current position and next action
 
-Current phase: **Phase 1 — Safe storage and real uploads**. Exact next task: **MT1.4 — Expose authenticated case/source APIs and security checks**. Batch implementation authorization recorded.
+Current phase: **Phase 1 — Safe storage and real uploads**. Exact next task: **Phase 1 Gate G1 — Independent review-and-fix subagent verification**. Batch implementation authorization recorded.
 
 Phase 0 completed and accepted via automated review-and-fix gate G0 (commit ec5b9c7, verdict PASS). Phase 1 in progress.
 
@@ -25,7 +25,7 @@ A checkbox means the deliverable and minimal verification passed and evidence wa
 - [x] **MT1.1** Establish schema, migrations, and restricted database roles. PRD: MT-03, MT-04, MT-11, MT-15. Depends on G0 approval.
 - [x] **MT1.2** Validate supported bundles and atomic imports/deduplication. PRD: MT-01, MT-02, MT-03, MT-11. Depends on MT1.1.
 - [x] **MT1.3** Extract/index complete cases with source locators. PRD: MT-01, MT-02, MT-05, MT-07. Depends on MT1.2.
-- [ ] **MT1.4** Expose authenticated case/source APIs and security checks. PRD: MT-01, MT-02, MT-04, MT-11. Depends on MT1.3.
+- [x] **MT1.4** Expose authenticated case/source APIs and security checks. PRD: MT-01, MT-02, MT-04, MT-11. Depends on MT1.3.
 
 ### Phase 2 — Complete first investigation workflow
 
@@ -75,6 +75,7 @@ Implementation-start authorization: **Recorded (explicit batch authorization for
 
 ## Verification and checkpoint ledger
 
+- **MT1.4 (2026-10-14)**: Implemented `src/moneytrail/api.py` exposing FastAPI authenticated REST endpoints (`/healthz`, `/api/v1/cases/import`, `/api/v1/cases`, `/api/v1/cases/{case_id}`, `/api/v1/cases/{case_id}/sources/{source_id}`, `/segments`, `/content`), constant-time bearer token auth (`hmac.compare_digest`), global workload lock for serial local processing, safe error envelope with `request_id`, controlled media types and dispositions without HTML execution. Implemented `tests/test_security.py` verifying 401 unauthenticated denial, 404 cross-case boundary protection, PostgreSQL reader role write failure (`ReadOnlySqlTransaction`), archive traversal prevention, and inert handling of adversarial text injections. Executed `pytest tests/test_import.py tests/test_security.py -q` (5 passed). Next action: Phase 1 Gate G1.
 - **MT1.3 (2026-10-14)**: Implemented `src/moneytrail/retrieval.py` with text/PDF line extraction preserving line numbers, policy metadata boundary enforcement, ~180 token chunking with ~30 token overlap, sentence-transformers embedding generation (`all-MiniLM-L6-v2` revision `1110a243fdf4706b3f48f1d95db1a4f5529b4d41`), exact locator resolution (`csv:r<n>`, `pdf:p<page>:l<start>-<end>`, `text:l<start>-<end>`), and tsvector lexical search. Connected real indexer to `ingest.py`. Executed `uv run --env-file .env python -m moneytrail.ingest import fixtures/demo.zip` (ready, 5 orders, 3 refunds, 5 fees, 2 payouts, 4 links, 2 policies, 6 chunks) and `pytest tests/test_import.py -q` (3 passed). Next action: MT1.4 — Expose authenticated case/source APIs and security checks.
 - **MT1.2 (2026-10-14)**: Implemented `src/moneytrail/ingest.py` with bundle validation, logical fingerprint computation, strict CSV parsing, duplicate equality locators, conflicting ID rejection, transaction rollback/atomicity, and staging directory lifecycle. Updated `conftest.py` with schema usage grants for test isolation. Implemented `tests/test_import.py` verifying atomicity on injected mid-import failure (0 surviving rows in DB), idempotent duplicate re-import, whitespace/archive-order invariant fingerprinting, and conflicting ID rejection with row references. Executed `uv run python -m moneytrail.ingest validate fixtures/demo.zip` (valid: true, 5 orders, 3 refunds, 5 fees, 2 payouts, 4 links) and `pytest tests/test_import.py -q` (2 passed). Next action: MT1.3 — Extract/index complete cases with source locators.
 - **Phase 0 Gate G0 (2026-10-13)**: Independent review-and-fix subagent completed thorough evaluation of candidate commit `ec5b9c7269b7935feb47687a0498141362d4a5d1` on `implementation/build`. Verified dependency locks (`uv lock --check`), frontend typecheck (0 errors), config validation, model feasibility pilot (10/10 probes passed, zero illegal dispatches, fits in context, offline provider check), demo accounting identity (exact 24,000,000 gross, 1,800,000 refunds, 600,000 fees, 18,600,000 received, 3,000,000 pending, 0 diff), and split validation (12 dev + 18 test cases, 0 overlapping bundle hashes). Subagent returned PASS with zero defects. Phase 0 verified and accepted under user batch implementation authorization. Next action: MT1.1.
