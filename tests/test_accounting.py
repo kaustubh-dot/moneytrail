@@ -294,10 +294,44 @@ async def test_dispatch_tool(test_settings: Settings):
             overflow_call = ToolCall(action="select_policy", order_ids=overflow_orders)
             await dispatch_tool(case_id, overflow_call, test_settings, reader_conn)
 
-        # 8. Missing required argument
+        # Direct select_policy also rejects >20 orders with RESULT_LIMIT
+        with pytest.raises(ValueError, match="RESULT_LIMIT"):
+            await select_policy(case_id, [f"O-{i}" for i in range(21)], reader_conn)
+
+        # 8. Reject RESULT_LIMIT overflow (>100 related records in inspect_order)
+        writer_conn = await get_writer_connection(test_settings)
+        try:
+            async with writer_conn.cursor() as cur:
+                await cur.execute(
+                    "SELECT source_id FROM orders WHERE case_id = %s AND order_id = 'O-002';",
+                    [case_id],
+                )
+                src_id = (await cur.fetchone())[0]
+                for i in range(101):
+                    await cur.execute(
+                        """
+                        INSERT INTO fees (case_id, fee_id, order_id, assessed_at, amount_paise, fee_kind, source_id, row_locators)
+                        VALUES (%s, %s, 'O-002', '2026-09-10T12:00:00+05:30', 100, 'processing', %s, '["csv:r1"]'::jsonb);
+                        """,
+                        [case_id, f"F-OVERFLOW-{i}", src_id],
+                    )
+            await writer_conn.commit()
+        finally:
+            await writer_conn.close()
+
+        with pytest.raises(ValueError, match="RESULT_LIMIT"):
+            overflow_inspect_call = ToolCall(action="inspect_order", order_id="O-002")
+            await dispatch_tool(case_id, overflow_inspect_call, test_settings, reader_conn)
+
+        # 9. Missing required argument
         with pytest.raises(ValueError, match="MISSING_ARGUMENT"):
             empty_order_call = ToolCall(action="inspect_order", order_id="")
             await dispatch_tool(case_id, empty_order_call, test_settings, reader_conn)
+
+        # 10. Verify case ID injection: foreign case cannot access O-001
+        foreign_case_id = uuid.uuid4()
+        with pytest.raises(KeyError, match="not found in case"):
+            await dispatch_tool(foreign_case_id, call_order, test_settings, reader_conn)
 
     finally:
         await reader_conn.close()

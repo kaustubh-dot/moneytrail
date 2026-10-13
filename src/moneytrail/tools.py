@@ -596,7 +596,7 @@ async def select_policy(
     Computes expected dates and rates deterministically outside LLM.
     """
     if order_ids is not None and len(order_ids) > 20:
-        raise ValueError("Explicit order_ids list exceeds maximum limit of 20")
+        raise ValueError("RESULT_LIMIT: Explicit order_ids list exceeds maximum limit of 20")
 
     tz_kolkata = zoneinfo.ZoneInfo("Asia/Kolkata")
 
