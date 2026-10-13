@@ -6,9 +6,9 @@ Updated 2026-10-13. Current state: documentation-only planning pack. Application
 
 ### Current position and next action
 
-Current phase: **Phase 6 — Reproducible delivery and demonstration**. Exact next task: **MT6.3 — Finish demo/interview handoff and PRD review**. Batch implementation authorization recorded.
+Current phase: **Phase 6 — Reproducible delivery and demonstration**. Exact next task: **Phase 6 Review and Final Gate G6 Approval**. Batch implementation authorization recorded.
 
-Phase 5 completed and accepted via automated review-and-fix gate G5 (candidate 02585c5, verdict PASS). MT6.1 and MT6.2 completed.
+All implementation phases (Phase 0 through Phase 6) are complete and verified. Ready for independent Gate G6 review.
 
 ## Canonical task list
 
@@ -57,7 +57,7 @@ A checkbox means the deliverable and minimal verification passed and evidence wa
 
 - [x] **MT6.1** Package monolith/database and verify Linux local networking. PRD: MT-11, MT-13, MT-15. Depends on G5 approval.
 - [x] **MT6.2** Add offline CI and prove clean-clone live setup. PRD: MT-01, MT-10, MT-11, MT-15. Depends on MT6.1.
-- [ ] **MT6.3** Finish demo/interview handoff and PRD review. PRD: MT-10, MT-12, MT-14, MT-15, MT-16. Depends on MT6.2.
+- [x] **MT6.3** Finish demo/interview handoff and PRD review. PRD: MT-10, MT-12, MT-14, MT-15, MT-16. Depends on MT6.2.
 
 ## Gate ledger
 
@@ -74,6 +74,8 @@ A checkbox means the deliverable and minimal verification passed and evidence wa
 Implementation-start authorization: **Recorded (explicit batch authorization for Phases 0 through 6 in order with per-phase review-and-fix gate; 2026-10-13)**. Planning/repository authorization does not authorize application phases. Record actual user approval scope/date at each gate; never treat silence, a passing test, or a commit as approval. A user's explicit batch authorization of named phases may be recorded, but must not be inferred.
 
 ## Verification and checkpoint ledger
+
+- **MT6.3 (2026-10-14)**: Published comprehensive, factual README documentation replacing all planning-scaffold placeholders. Documented project status, architecture with security boundaries, verified setup and quickstarts, offline test and live smoke instructions, 3-family repeatable demo script (Family A headline accounting, Family B idempotent deduplication & evidence gaps, Family C policy conflicts & cancellation), and technical interview notes detailing the merchant discrepancy problem, request lifecycle, context budgeting, real engineering bug discoveries/fixes, and explicit non-goals. Verified full PRD MT-01 through MT-16 requirement mappings against implementation evidence. Ready for Gate G6 review.
 
 - **MT6.2 (2026-10-14)**: Created `.github/workflows/ci.yml` defining offline GitHub Actions workflow with PostgreSQL/pgvector service (`pgvector/pgvector:pg16@sha256:7b822b0...`), locked dependency sync, frontend typecheck/build, ephemeral database configuration, idempotent migrations, full 49-test regression suite, and dataset/freeze validation without live LLM calls. Created executable `scripts/smoke.sh` implementing authenticated case upload, exact integer reconciliation check, original question submission, polling, grounding checks, and source segment resolution; verified `bash scripts/smoke.sh --live` passed in 13s against running Ollama provider. Verified clean-clone process and isolated test cleanup. Next action: MT6.3 — Finish demo/interview handoff and PRD review.
 

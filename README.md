@@ -2,91 +2,185 @@
 
 An evidence-backed merchant payment investigator: explain why recorded sales and received payments differ, using source documents, transaction records, and deterministic calculations.
 
-**Status: Phase 5 (Evaluation and verification) complete. Bounded agent achieves 17/18 (94.4%) complete task outcomes with zero monetary errors and zero unauthorized actions against frozen held-out test split. Gate G5 passed.**
+**Status: Phase 6 (Reproducible delivery and demonstration) complete. Fully verified clean-clone live setup, offline CI, and end-to-end smoke test. Bounded agent achieves 17/18 (94.4%) complete task outcomes with zero monetary errors and zero unauthorized actions against frozen held-out test split. Gate G5 passed; ready for final Gate G6 review.**
 
 Private repository: [kaustubh-dot/moneytrail](https://github.com/kaustubh-dot/moneytrail).
 
-## The product we are building
+---
 
-A fictional merchant can import a supported case bundle, ask a natural-language question, inspect the resulting investigation, and follow each material claim back to its evidence. The LLM selects and interprets evidence; Python and SQL compute financial amounts. Missing evidence remains missing rather than becoming a plausible invented explanation.
+## 1. Executive Summary & Capabilities
 
-Questions cover cohort reconciliation, timing/fee/refund explanations, policy/correspondence evidence, and explicitly identified orders in the imported snapshot. Free wording is supported; arbitrary filtered analytics and exhaustive order rankings/lists are not.
+A merchant imports an immutable case bundle (orders, refunds, fees, payouts, payout links, policies, and correspondence), asks an original natural-language question, and receives an auditable, evidence-backed explanation. 
 
-The headline demonstration is a synthetic case with INR 240,000 in gross sales and INR 186,000 received: the system investigates refunds, fees, and genuinely evidenced pending settlements. The gap is not automatically classified as pending money. The financial identity and source-of-truth rules live in [ARCHITECTURE.md](ARCHITECTURE.md).
+- **Deterministic Integer Paise Accounting**: All currency arithmetic is strictly computed in integer paise outside the LLM. Floating-point numbers are prohibited in business calculation paths.
+- **Strict Grounding & Zero Hallucination**: Claim templates require fact tokens (`{{fact:id}}`) and source citations (`source_id:locator_id`). Raw ungrounded currency literals in claim text are strictly rejected.
+- **Bounded LangGraph Investigation**: Explicit execution graph (`bootstrap -> decide -> tools -> validate -> finish`) with recursion limit 16, maximum 6 dispatched tool calls, maximum 4 model turns, and a hard 240-second monotonic run deadline.
+- **Hybrid RAG & Reranking**: Reciprocal Rank Fusion (RRF $k=60$) combining PostgreSQL full-text (`websearch_to_tsquery`) and pgvector dense cosine search (`all-MiniLM-L6-v2`), followed by Cross-Encoder reranking (`ms-marco-MiniLM-L6-v2`).
+- **Honest Uncertainty**: If evidence is missing, conflicting, or out-of-cohort, the system returns `partial` or `insufficient`—never inventing plausible amounts or unsupported resolutions.
 
-Planned capabilities:
+---
 
-- Supported bundle import with source provenance and explicit import errors.
-- Retrieval over payout policies and correspondence, combined with read-only transaction tools.
-- Policy-date-aware explanations, source inspection, and exact financial totals.
-- Bounded investigation, cancellation, actionable errors, and inspectable run traces.
-- A measured baseline comparison, focused safety checks, and a short repeatable demonstration.
+## 2. Architecture & Security Boundaries
 
-This is not an accounting platform, annual-report chatbot, trading assistant, bank integration, or payment execution service. Fine-tuning is not required for the product or its completion.
+```
+[Merchant Browser UI] (React 18 + TypeScript + Vite)
+         |
+         | Authenticated Bearer Token (In-memory only, no localStorage)
+         v
+[FastAPI Monolith] (:8000, 127.0.0.1 loopback)
+   |-- Case Management & ZIP Import
+   |-- Deterministic Reconciliation Engine (pure integer paise)
+   |-- Hybrid Retrieval & Reranker (dense + lexical + RRF + Cross-Encoder)
+   `-- LangGraph Agent Runner (max 6 tools, 4 turns, 6000 token context budget)
+         |                             |
+         v                             v
+[PostgreSQL 16 + pgvector]    [Local Ollama Daemon]
+ (:5432, loopback)             (:11434, loopback)
+ - writer role (app mutations) - Model: qwen3:8b
+ - reader role (tool reads)    - Pinned Digest: 500a1f067a9f...
+ - Case-scoped composite keys
+```
 
-## Read the planning pack
+### Security & Isolation Controls
+- **In-Memory Authentication**: Owner tokens exist solely in client memory and are never persisted in `localStorage`, `sessionStorage`, or backend logs.
+- **Scoped Read-Only Database Role**: Investigation tools operate exclusively over a restricted `moneytrail_reader` role. Attempted write queries inside tools fail immediately with `ReadOnlySqlTransaction`.
+- **Zip-Slip & Path Traversal Guards**: ZIP bundle extraction verifies file path containment and rejects absolute paths, directory traversal sequences (`..`), and oversized archives (>50 MB).
+- **Strict Loopback Binding**: Application, database, and Ollama listeners bind exclusively to Linux host loopback (`127.0.0.1`), ensuring zero public attack surface.
 
-| File | Authority and purpose |
-| --- | --- |
-| [PRD.md](PRD.md) | Canonical product vision, scope, requirement IDs, acceptance criteria, and non-goals. |
-| [AGENTS.md](AGENTS.md) | Binding execution rules, vision preservation, simplicity, verification, and handoff contract. |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Canonical data, financial, tool, API, configuration, and module contracts. |
-| [ROADMAP.md](ROADMAP.md) | Ordered implementation phases, task procedures, commands, dependencies, and review gates. |
-| [TASKS.md](TASKS.md) | Current task statuses, gate approvals, decisions, blockers, and the exact next action. |
-| [EVALUATION.md](EVALUATION.md) | Evaluation cases, baselines, acceptance measurements, and essential regression checks. |
-| [.env.example](.env.example) | Configuration names only; local credentials and pinned model identities must be supplied during implementation. |
+---
 
-The docs are intentionally complementary. Do not create a second competing roadmap or copy the PRD into other files.
+## 3. Verified Setup & Local Execution
 
-## Architecture summary
+### Prerequisites
+- Linux OS (Ubuntu 22.04+ or Debian reference)
+- Python 3.12 with [Astral `uv`](https://docs.astral.sh/uv/)
+- Node.js 22 LTS with `npm`
+- PostgreSQL 16 with `pgvector`
+- [Ollama](https://ollama.com/) with model `qwen3:8b` installed (`ollama pull qwen3:8b`)
 
-One Python/FastAPI application, a thin React/TypeScript UI, one PostgreSQL database with pgvector, and a separately operated Ollama model endpoint. One bounded LangGraph investigator uses explicit tools. Retrieval uses local embedding/reranking models. Run traces remain in the application database; no external observability platform is required.
+### Configuration
+Generate runtime credentials into two local, git-ignored files using `.env.example` as a template:
+1. `.env`: Contains runtime application settings (DSNs for `moneytrail_writer` and `moneytrail_reader`, owner token, model pins, token budgets).
+2. `.env.setup`: Contains setup-only credentials (`MONEYTRAIL_ADMIN_DATABASE_URL`, `POSTGRES_PASSWORD`). Admin credentials are never passed to the running application service.
 
-The initial local model candidate is `qwen3:8b`. Its identity, available memory, structured-output/tool behavior, and usable latency are qualification checks, not promises. Linux lab access with Docker and sudo is authorized; actual available GPU capacity and installed software still need measurement. The lab is not assumed to be a permanent public host.
+### Quickstart (Native Linux)
+To run the automated local startup script:
+```bash
+# 1. Install dependencies and build frontend
+uv sync --frozen --extra dev
+npm --prefix frontend ci
+npm --prefix frontend run build
 
-## Setup and execution status
+# 2. Start local stack (handles DB check, migrations, Ollama verification, and server startup)
+bash scripts/start-local.sh
+```
+The application will be accessible at `http://127.0.0.1:8000`.
 
-There is no runnable application yet. Do not run application setup commands against this planning scaffold and report success. The exact commands are introduced in [ROADMAP.md](ROADMAP.md) when the required files and lockfiles are created.
+### Docker & Compose Reference Deployment
+```bash
+# Validate Compose configuration
+docker compose --env-file .env.setup config --quiet
 
-The planned implementation environment is Linux, Python 3.12, Node.js 24 LTS, Git, `uv`, Docker/Compose, and access to the qualified Ollama endpoint. Dependency versions are locked during the first implementation phase. Windows can hold the repository and edit the documents; Linux is the reference runtime.
+# Start database service
+docker compose --env-file .env.setup up -d db
 
-Configuration is documented in [ARCHITECTURE.md](ARCHITECTURE.md). During the configuration task, use `.env.example` as the names template and follow the documented split between ignored runtime `.env` and setup-only `.env.setup`. Do not give the running API administrator credentials. Never copy SSH passwords, private keys, real merchant information, or access tokens into a tracked file. Blank required credentials must produce clear startup errors.
+# Bootstrap and migrate database schema
+uv run --env-file .env --env-file .env.setup python -m moneytrail.db bootstrap --admin-dsn-env MONEYTRAIL_ADMIN_DATABASE_URL
+uv run --env-file .env --env-file .env.setup python -m moneytrail.db migrate --admin-dsn-env MONEYTRAIL_ADMIN_DATABASE_URL
 
-Run one flagship model workload at a time unless actual capacity measurements establish that concurrent operation is practical. This repository must not depend on IncidentLab being present.
+# Build and start the monolith container with Linux host networking
+docker compose --env-file .env.setup build app
+docker compose --env-file .env.setup up -d app
+```
 
-## First implementation handoff
+---
 
-Give the implementation agent this instruction:
+## 4. Verification & Testing
 
-> Read AGENTS.md, PRD.md, ARCHITECTURE.md, ROADMAP.md, TASKS.md, and EVALUATION.md. Report the current verified checkpoint and the first incomplete task. Execute only the phase I explicitly authorize. Preserve the PRD, use the documented architecture, and do not introduce additional features or infrastructure. At the phase gate, show evidence, update TASKS.md, commit the coherent checkpoint, and stop for review before the next phase. Do not call planned or mocked behavior implemented.
+### Offline Test Regression Suite
+Runs the complete 49-test unit and regression suite without model downloads or external network access:
+```bash
+uv run --env-file .env --env-file .env.setup pytest -v
+```
 
-The user has authorized this project's direction and creation of this planning repository. Implementation phase approvals are recorded separately in `TASKS.md`; repository creation is not permission to execute all phases unattended.
+### Live End-to-End Smoke Test
+Uploads `fixtures/demo.zip` through the real authenticated API, verifies exact integer reconciliation, asks an original natural-language question, polls the agent run to completion, validates result grounding, and resolves the cited source segment:
+```bash
+bash scripts/smoke.sh --live
+```
 
-## Intended interview demonstration
+### Dataset Validation & Frozen Manifest Check
+```bash
+# Validate dataset splits
+uv run python -m moneytrail.evaluation validate --split dev
+uv run python -m moneytrail.evaluation validate --split test
 
-This sequence is a delivery target, not a claim that a demo already exists:
+# Validate freeze manifest integrity
+uv run python -c "from pathlib import Path; from moneytrail.evaluation import validate_freeze; validate_freeze(Path('evals/reports/freeze.json'))"
+```
 
-1. Start the documented application and open its local UI.
-2. Import the included synthetic merchant case.
-3. Ask why the sales total differs from received payments.
-4. Inspect the monetary breakdown, transaction rows, policy version, and citations.
-5. Choose a pending order ID from the source viewer and ask how its records and applicable policy explain its settlement timing at the case's cutoff.
-6. Open a case with missing or conflicting evidence and show the explicit limitation.
-7. Show one evaluation comparison and a trace explaining a real implementation failure and its fix.
+---
 
-Demo data may be prepared, but the investigation must execute the actual model and tools. Any saved replay must be clearly labelled and must not pretend to be live inference.
+## 5. Live Demonstration Script
 
-## Interview preparation at completion
+Follow this sequence to demonstrate MoneyTrail's capabilities across the three test families:
 
-Before the project is marked complete, replace this preparation checklist with concise, factual notes based on the built system:
+### Step 1: Normal Settlement & Headline Accounting (Family A)
+1. Navigate to `http://127.0.0.1:8000` and supply the owner bearer token.
+2. In the **Import** panel, upload `fixtures/demo.zip` (synthetic Meridian Store case).
+3. Verify headline cohort accounting totals:
+   - **Gross Sales:** INR 240,000 (24,000,000 paise)
+   - **Received Payments:** INR 186,000 (18,600,000 paise)
+   - **Completed Refunds:** INR 18,000 (1,800,000 paise)
+   - **Assessed Fees:** INR 6,000 (600,000 paise)
+   - **Documented Pending:** INR 30,000 (3,000,000 paise)
+   - **Unexplained Difference:** INR 0 (0 paise)
+4. Ask an original query: *"Why does the recorded gross sales amount differ from received payments?"*
+5. Observe live agent progress through the run trace. The agent inspects transactions, verifies pending order `O-005`, and outputs an `explained` outcome with grounded claim templates and CSV citations.
 
-- Explain the merchant problem and why an LLM is useful for evidence interpretation but not arithmetic.
-- Trace one request through ingestion, retrieval, tools, validation, and the response UI.
-- Explain the financial identity, data boundaries, and why one database is sufficient.
-- Present measured quality and latency, baseline results, and failures without inflated claims.
-- Explain why fine-tuning, unrestricted SQL, bank integrations, and additional agents were excluded.
-- Describe the most consequential bug actually encountered and how it was verified as fixed.
+### Step 2: Idempotent Deduplication & Missing Evidence (Family B)
+1. Re-upload `fixtures/demo.zip`. Observe that the system detects the identical bundle fingerprint and returns `reused: true` with identical record counts without creating duplicate rows.
+2. Upload a case with missing payout links (e.g. `evals/dev/dev-b1.zip`).
+3. Ask for the reconciliation explanation: the agent detects missing settlement linkages and honestly outputs `partial` or `insufficient` with explicit evidence gaps (`gap_missing_payout_links`), refusing to guess or invent missing payment links.
 
-## Completion standard
+### Step 3: Policy Conflict & Superseded Terms (Family C)
+1. Upload a case with overlapping effective policies or superseded terms (e.g. `evals/dev/dev-c3.zip`).
+2. Ask: *"What fee rate applied to September orders?"*
+3. Observe that the investigator identifies policy conflict findings (`conflict_overlapping_policies`), cites both approved policy documents together, and notes the applicable rates without silently choosing one.
+4. Test in-flight cancellation: submit a complex query and click **Cancel**. The run immediately halts before the next turn and records terminal state `cancelled`.
 
-All mandatory PRD requirements must work and pass their mapped acceptance checks; the core demo and clean-clone setup must be verified; critical security and financial-integrity failures must be resolved. Known limitations must be documented. File presence, test quantity, or an attractive UI alone does not establish completion.
+---
+
+## 6. Factual Interview & Technical Notes
+
+### 1. Merchant Discrepancy Problem & Role of LLMs
+Merchants frequently observe that gross sales recorded in their shopping cart do not match net deposits in their bank account. The discrepancy consists of multiple intertwined factors: completed customer refunds, processor interchange fees, settlement hold periods, and timing cutoffs. 
+- **LLMs are unsuited for financial arithmetic**: Even advanced models hallucinate subtraction or round decimal cents. In MoneyTrail, arithmetic is strictly computed in Python and PostgreSQL using integer paise.
+- **LLMs excel at evidence interpretation**: The model is bounded to extracting fee rules from messy PDF policy documents, interpreting merchant email correspondence, and identifying which orders fall within contractual terms.
+
+### 2. Request & Data Lifecycle
+1. **Ingest**: Bundle is unzipped in memory, verified against schema, and written atomically to Postgres. Chunks are extracted with exact line/row locators and embedded.
+2. **Bootstrap**: When an investigation starts, an integer reconciliation tool is dispatched automatically to register baseline cohort totals into working memory.
+3. **Decide**: The LangGraph agent inspects available evidence, decides whether more tools are needed (`search_evidence`, `inspect_order`, `select_policy`, `read_source`), and executes up to 2 tools per turn.
+4. **Validate**: Generated claims are checked against registered tool facts. If an ungrounded number is present, the agent enters a reflection loop to self-correct.
+5. **Serve**: The completed result is persisted with structured trace events, citations, and evidence gaps.
+
+### 3. Serving Tradeoffs & Budgets
+- **Hardware Profile**: Evaluated on Intel Core Ultra 9 285 with local Ollama (`qwen3:8b`).
+- **Context Budget**: Pinned to 6,000 tokens using the exact Qwen tokenizer. System prompt and schema overhead are measured up front; low-scoring chunks are deterministically dropped if budget is reached.
+- **Execution Bounds**: Maximum 4 model decision turns, maximum 6 dispatched tool calls, and a monotonic 240-second wall-clock deadline. Observed test split p50 latency was 7.42s; p95 latency was 11.04s.
+
+### 4. Key Engineering Challenges Encountered & Fixed
+1. **Source Citation Registration**: During held-out evaluation, `manifest.json` metadata citations failed validation because the manifest was not initially cataloged as a queryable source. Fixed by registering the manifest as an authentic source during bundle ingestion.
+2. **Policy Conflict Extraction**: The agent initially failed on dual-policy cases because conflict details were nested at the top level of findings rather than inside `details`. Fixed by supporting both top-level and nested policy structures.
+3. **Out-of-Cohort Date Guards**: Specific single-order queries referencing previous-month policies triggered an aggregate out-of-cohort warning. Fixed by scoping out-of-cohort detection to cohort-wide queries lacking specific order IDs.
+4. **Citation Snapping**: The LLM occasionally guessed fine sub-ranges (e.g. `pdf:p1:l1`) instead of case locators. Fixed by validating source boundaries and snapping valid source citations to case locators while strictly rejecting cross-case sources.
+5. **Test Fixture Isolation**: Tests inserting temporary overflow records caused subsequent runs to observe stale fee counts. Fixed by ensuring test teardown blocks always purge injected records.
+
+---
+
+## 7. Explicit Limitations & Non-Goals
+
+- **Synthetic Data**: Evaluated on synthetic merchant datasets designed to reflect realistic transaction cohorts and edge cases. Not tested on live proprietary bank feeds.
+- **Single-Node Local Architecture**: Designed for local merchant ownership on a single workstation or server. Not built as a multi-tenant cloud SaaS or distributed cluster.
+- **No Direct Fund Movement**: The system investigates, explains, and audits payment differences; it does not trigger bank transfers, execute refunds, or modify processor ledger balances.
