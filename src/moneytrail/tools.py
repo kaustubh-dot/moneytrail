@@ -1,14 +1,17 @@
 """Deterministic financial reconciliation and order record inspection tools for MoneyTrail."""
 
+import json
 import uuid
-from datetime import datetime
+import zoneinfo
+from datetime import date, datetime, timedelta
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 import psycopg
 from psycopg import sql
 from psycopg.rows import dict_row
 
-from moneytrail.schemas import Citation, Fact, OrderEvidence, Reconciliation
+from moneytrail.schemas import Citation, Fact, OrderEvidence, PolicyEvidence, Reconciliation
 
 
 async def reconcile(case_id: uuid.UUID, db: psycopg.AsyncConnection) -> Reconciliation:
@@ -561,5 +564,300 @@ async def inspect_order(
         links=[dict(lk) for lk in order_links],
         expected_net_paise=expected_net_paise,
         citations=citations,
+        facts=facts,
+    )
+
+
+async def select_policy(
+    case_id: uuid.UUID,
+    order_ids: list[str] | None,
+    db: psycopg.AsyncConnection,
+) -> PolicyEvidence:
+    """
+    Select policies by order date and publication cutoff, retaining all conflicts.
+    Supports whole-cohort grouped policy lookup (order_ids=None) or explicit selection (up to 20 orders).
+    Detects differing terms as POLICY_CONFLICT and missing policy as MISSING_POLICY.
+    Computes expected dates and rates deterministically outside LLM.
+    """
+    if order_ids is not None and len(order_ids) > 20:
+        raise ValueError("Explicit order_ids list exceeds maximum limit of 20")
+
+    tz_kolkata = zoneinfo.ZoneInfo("Asia/Kolkata")
+
+    async with db.cursor(row_factory=dict_row) as cur:
+        # 1. Fetch case metadata
+        await cur.execute(
+            """
+            SELECT case_id, as_of
+            FROM cases
+            WHERE case_id = %s;
+            """,
+            [case_id],
+        )
+        case_row = await cur.fetchone()
+        if not case_row:
+            raise KeyError(f"Case {case_id} not found")
+
+        as_of: datetime = case_row["as_of"]
+
+        # 2. Fetch policies for this case
+        await cur.execute(
+            """
+            SELECT policy_id, source_id, published_at, effective_from, effective_to,
+                   calendar_days, fee_bps, metadata_locators
+            FROM policies
+            WHERE case_id = %s
+            ORDER BY policy_id ASC;
+            """,
+            [case_id],
+        )
+        policies = await cur.fetchall()
+
+        # Filter policies published strictly before cutoff as_of
+        published_policies = [p for p in policies if p["published_at"] < as_of]
+
+        # 3. Fetch orders
+        if order_ids is not None:
+            await cur.execute(
+                """
+                SELECT order_id, captured_at, gross_paise
+                FROM orders
+                WHERE case_id = %s AND order_id = ANY(%s)
+                ORDER BY order_id ASC;
+                """,
+                [case_id, order_ids],
+            )
+            orders = await cur.fetchall()
+            found_ids = {o["order_id"] for o in orders}
+            missing_ids = [oid for oid in order_ids if oid not in found_ids]
+            if missing_ids:
+                raise KeyError(f"Orders not found in case {case_id}: {missing_ids}")
+        else:
+            await cur.execute(
+                """
+                SELECT order_id, captured_at, gross_paise
+                FROM orders
+                WHERE case_id = %s
+                ORDER BY order_id ASC;
+                """,
+                [case_id],
+            )
+            orders = await cur.fetchall()
+
+    # Match policies per order
+    order_to_matching: dict[str, list[dict[str, Any]]] = {}
+    for o in orders:
+        oid = o["order_id"]
+        captured_dt = o["captured_at"].astimezone(tz_kolkata)
+        captured_date = captured_dt.date()
+
+        matching: list[dict[str, Any]] = []
+        for p in published_policies:
+            eff_from = p["effective_from"]
+            eff_to = p["effective_to"]
+            # effective_from <= captured_local_date < effective_to (or open if eff_to is None)
+            if eff_from <= captured_date and (eff_to is None or captured_date < eff_to):
+                matching.append(p)
+
+        order_to_matching[oid] = matching
+
+    conflicting_policies: list[dict[str, Any]] = []
+    missing_policy_orders: list[str] = []
+    applicable_pols_by_id: dict[str, dict[str, Any]] = {}
+    policy_order_counts: dict[str, int] = {}
+    policy_order_dates: dict[str, list[date]] = {}
+    policy_matching_orders: dict[str, list[str]] = {}
+
+    all_citations: list[Citation] = []
+    citations_seen: set[tuple[uuid.UUID, str]] = set()
+
+    for o in orders:
+        oid = o["order_id"]
+        matching = order_to_matching[oid]
+
+        if not matching:
+            missing_policy_orders.append(oid)
+            continue
+
+        distinct_terms = {(p["calendar_days"], p["fee_bps"]) for p in matching}
+        if len(distinct_terms) > 1:
+            # POLICY_CONFLICT
+            differing_terms: list[str] = []
+            if len({p["calendar_days"] for p in matching}) > 1:
+                differing_terms.append("calendar_days")
+            if len({p["fee_bps"] for p in matching}) > 1:
+                differing_terms.append("fee_bps")
+
+            conflicting_policies.append({
+                "code": "POLICY_CONFLICT",
+                "order_id": oid,
+                "policies": [
+                    {
+                        "policy_id": p["policy_id"],
+                        "calendar_days": p["calendar_days"],
+                        "fee_bps": p["fee_bps"],
+                        "source_id": str(p["source_id"]),
+                    }
+                    for p in matching
+                ],
+                "differing_terms": differing_terms,
+            })
+            for p in matching:
+                locators = p["metadata_locators"] if isinstance(p["metadata_locators"], list) else json.loads(p["metadata_locators"])
+                for loc in locators:
+                    cit_key = (p["source_id"], loc)
+                    if cit_key not in citations_seen:
+                        citations_seen.add(cit_key)
+                        all_citations.append(
+                            Citation(
+                                source_id=p["source_id"],
+                                locator_id=loc,
+                                label=f"Policy {p['policy_id']} Conflict Metadata",
+                            )
+                        )
+        else:
+            # Applicable without conflict
+            captured_dt = o["captured_at"].astimezone(tz_kolkata)
+            captured_date = captured_dt.date()
+            for p in matching:
+                pid = p["policy_id"]
+                applicable_pols_by_id[pid] = p
+                policy_order_counts[pid] = policy_order_counts.get(pid, 0) + 1
+                policy_order_dates.setdefault(pid, []).append(captured_date)
+                policy_matching_orders.setdefault(pid, []).append(oid)
+
+                locators = p["metadata_locators"] if isinstance(p["metadata_locators"], list) else json.loads(p["metadata_locators"])
+                for loc in locators:
+                    cit_key = (p["source_id"], loc)
+                    if cit_key not in citations_seen:
+                        citations_seen.add(cit_key)
+                        all_citations.append(
+                            Citation(
+                                source_id=p["source_id"],
+                                locator_id=loc,
+                                label=f"Policy {p['policy_id']} Metadata",
+                            )
+                        )
+
+    if missing_policy_orders:
+        conflicting_policies.append({
+            "code": "MISSING_POLICY",
+            "order_ids": missing_policy_orders,
+            "message": f"No applicable policy found for {len(missing_policy_orders)} order(s)",
+        })
+
+    applicable_policies_list: list[dict[str, Any]] = []
+    for pid, p in applicable_pols_by_id.items():
+        dates = policy_order_dates[pid]
+        locators = p["metadata_locators"] if isinstance(p["metadata_locators"], list) else json.loads(p["metadata_locators"])
+        applicable_policies_list.append({
+            "policy_id": p["policy_id"],
+            "source_id": str(p["source_id"]),
+            "published_at": p["published_at"].isoformat(),
+            "effective_from": p["effective_from"].isoformat(),
+            "effective_to": p["effective_to"].isoformat() if p["effective_to"] else "open",
+            "calendar_days": p["calendar_days"],
+            "fee_bps": p["fee_bps"],
+            "order_count": policy_order_counts[pid],
+            "min_captured_date": min(dates).isoformat() if dates else None,
+            "max_captured_date": max(dates).isoformat() if dates else None,
+            "order_ids": policy_matching_orders.get(pid, []),
+            "metadata_locators": locators,
+        })
+
+    facts: list[Fact] = []
+    for pid, p in applicable_pols_by_id.items():
+        locators = p["metadata_locators"] if isinstance(p["metadata_locators"], list) else json.loads(p["metadata_locators"])
+        pol_cits = [
+            Citation(
+                source_id=p["source_id"],
+                locator_id=loc,
+                label=f"Policy {p['policy_id']} Metadata",
+            )
+            for loc in locators
+        ]
+        facts.append(
+            Fact(
+                fact_id=f"fact_{pid}_fee_rate",
+                kind="rate",
+                value=f"{p['fee_bps']} bps",
+                complete=True,
+                citations=pol_cits,
+                derivation={"policy_id": pid, "fee_bps": p["fee_bps"]},
+            )
+        )
+        facts.append(
+            Fact(
+                fact_id=f"fact_{pid}_settlement_days",
+                kind="count",
+                value=p["calendar_days"],
+                complete=True,
+                citations=pol_cits,
+                derivation={"policy_id": pid, "calendar_days": p["calendar_days"]},
+            )
+        )
+
+    if order_ids is not None:
+        for o in orders:
+            oid = o["order_id"]
+            matching = order_to_matching[oid]
+            distinct_terms = {(p["calendar_days"], p["fee_bps"]) for p in matching}
+            if len(matching) >= 1 and len(distinct_terms) == 1:
+                p = matching[0]
+                captured_dt = o["captured_at"].astimezone(tz_kolkata)
+                captured_date = captured_dt.date()
+                expected_date = captured_date + timedelta(days=p["calendar_days"])
+
+                expected_fee_paise = int(
+                    (Decimal(o["gross_paise"]) * Decimal(p["fee_bps"]) / Decimal(10000)).quantize(
+                        Decimal("1"), rounding=ROUND_HALF_UP
+                    )
+                )
+
+                locators = p["metadata_locators"] if isinstance(p["metadata_locators"], list) else json.loads(p["metadata_locators"])
+                pol_cits = [
+                    Citation(
+                        source_id=p["source_id"],
+                        locator_id=loc,
+                        label=f"Policy {p['policy_id']} Metadata",
+                    )
+                    for loc in locators
+                ]
+
+                facts.append(
+                    Fact(
+                        fact_id=f"fact_{oid}_expected_settlement_date",
+                        kind="date",
+                        value=expected_date.isoformat(),
+                        complete=True,
+                        citations=pol_cits,
+                        derivation={
+                            "order_id": oid,
+                            "captured_date": captured_date.isoformat(),
+                            "calendar_days": p["calendar_days"],
+                        },
+                    )
+                )
+                facts.append(
+                    Fact(
+                        fact_id=f"fact_{oid}_expected_fee",
+                        kind="money",
+                        value=expected_fee_paise,
+                        value_paise=expected_fee_paise,
+                        currency="INR",
+                        complete=True,
+                        citations=pol_cits,
+                        derivation={
+                            "order_id": oid,
+                            "gross_paise": o["gross_paise"],
+                            "fee_bps": p["fee_bps"],
+                        },
+                    )
+                )
+
+    return PolicyEvidence(
+        applicable_policies=applicable_policies_list,
+        conflicting_policies=conflicting_policies,
+        citations=all_citations,
         facts=facts,
     )

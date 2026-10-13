@@ -200,6 +200,7 @@ class ToolResult(BaseModel):
 
 class Claim(BaseModel):
     text_template: str
+    text: str | None = None
     fact_ids: list[str] = Field(default_factory=list)
     citations: list[Citation] = Field(default_factory=list)
 
@@ -258,3 +259,31 @@ class RunEvent(BaseModel):
 class ChatMessage(BaseModel):
     role: Literal["system", "user", "assistant"]
     content: str
+
+
+class InvestigationState(BaseModel):
+    run_id: UUID
+    case_id: UUID
+    question: str
+    cohort_start: datetime | None = None
+    cohort_end: datetime | None = None
+    as_of: datetime | None = None
+    phase: str = "init"
+    tool_calls_used: int = 0
+    model_turns_used: int = 0
+    deadline: datetime | None = None
+    cancelled: bool = False
+    facts: list[Fact] = Field(default_factory=list)
+    evidence: list[dict[str, Any]] = Field(default_factory=list)
+    findings: list[dict[str, Any]] = Field(default_factory=list)
+    unresolved: list[EvidenceGap] = Field(default_factory=list)
+    selected_sources: list[UUID] = Field(default_factory=list)
+    last_decision: Decision | None = None
+    valid_citations: set[tuple[UUID, str]] = Field(default_factory=set)
+    reconciliation: Reconciliation | None = None
+
+
+class ContextPacket(BaseModel):
+    messages: list[ChatMessage]
+    token_count: int
+    omitted_chunks: int = 0
