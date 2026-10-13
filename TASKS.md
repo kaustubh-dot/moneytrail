@@ -22,7 +22,7 @@ A checkbox means the deliverable and minimal verification passed and evidence wa
 
 ### Phase 1 — Safe storage and real uploads
 
-- [ ] **MT1.1** Establish schema, migrations, and restricted database roles. PRD: MT-03, MT-04, MT-11, MT-15. Depends on G0 approval.
+- [x] **MT1.1** Establish schema, migrations, and restricted database roles. PRD: MT-03, MT-04, MT-11, MT-15. Depends on G0 approval.
 - [ ] **MT1.2** Validate supported bundles and atomic imports/deduplication. PRD: MT-01, MT-02, MT-03, MT-11. Depends on MT1.1.
 - [ ] **MT1.3** Extract/index complete cases with source locators. PRD: MT-01, MT-02, MT-05, MT-07. Depends on MT1.2.
 - [ ] **MT1.4** Expose authenticated case/source APIs and security checks. PRD: MT-01, MT-02, MT-04, MT-11. Depends on MT1.3.
