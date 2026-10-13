@@ -1,0 +1,102 @@
+{
+  "split": "test",
+  "freeze_file": "evals/reports/freeze.json",
+  "timestamp": "2026-10-14T03:05:20.685489",
+  "total_questions": 18,
+  "eligible_questions": 17,
+  "zero_doc_questions": [
+    "test-c6"
+  ],
+  "denominators": {
+    "A": 6,
+    "B": 6,
+    "C": 6,
+    "pooled": 18
+  },
+  "candidate_recall_top20": {
+    "lexical": {
+      "pooled": 0.8333333333333334,
+      "counts": {
+        "A": 5,
+        "B": 4,
+        "C": 6,
+        "pooled": 15
+      }
+    },
+    "dense": {
+      "pooled": 1.0,
+      "counts": {
+        "A": 6,
+        "B": 6,
+        "C": 6,
+        "pooled": 18
+      }
+    },
+    "fused": {
+      "pooled": 1.0,
+      "counts": {
+        "A": 6,
+        "B": 6,
+        "C": 6,
+        "pooled": 18
+      }
+    },
+    "reranked": {
+      "pooled": 1.0,
+      "counts": {
+        "A": 6,
+        "B": 6,
+        "C": 6,
+        "pooled": 18
+      }
+    }
+  },
+  "final_doc_recall_top6": {
+    "lexical": {
+      "pooled": 0.8333333333333334,
+      "counts": {
+        "A": 5,
+        "B": 4,
+        "C": 6,
+        "pooled": 15
+      }
+    },
+    "dense": {
+      "pooled": 1.0,
+      "counts": {
+        "A": 6,
+        "B": 6,
+        "C": 6,
+        "pooled": 18
+      }
+    },
+    "fused": {
+      "pooled": 1.0,
+      "counts": {
+        "A": 6,
+        "B": 6,
+        "C": 6,
+        "pooled": 18
+      }
+    },
+    "reranked": {
+      "pooled": 1.0,
+      "counts": {
+        "A": 6,
+        "B": 6,
+        "C": 6,
+        "pooled": 18
+      }
+    }
+  },
+  "per_family_final_recall_top6": {
+    "A": 1.0,
+    "B": 1.0,
+    "C": 1.0
+  },
+  "gates": {
+    "candidate_recall_gate_passed": true,
+    "final_doc_recall_gate_passed": true,
+    "overall_gate_passed": true
+  }
+}

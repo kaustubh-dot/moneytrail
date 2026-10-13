@@ -111,13 +111,25 @@ async def reconcile(case_id: uuid.UUID, db: psycopg.AsyncConnection) -> Reconcil
         # 7. Fetch findings
         await cur.execute(
             """
-            SELECT code, severity, affected_record_ids, details
+            SELECT code, severity, affected_record_ids, details, citations
             FROM case_findings
             WHERE case_id = %s;
             """,
             [case_id],
         )
         findings = [dict(f) for f in await cur.fetchall()]
+
+        # 8. Fetch sources mapping
+        await cur.execute(
+            """
+            SELECT source_id, relative_name
+            FROM sources
+            WHERE case_id = %s;
+            """,
+            [case_id],
+        )
+        sources_list = await cur.fetchall()
+        sources_by_name = {s["relative_name"]: s["source_id"] for s in sources_list}
 
     # Maps for joining records per order
     refunds_by_order: dict[str, list[dict[str, Any]]] = {}
@@ -173,6 +185,13 @@ async def reconcile(case_id: uuid.UUID, db: psycopg.AsyncConnection) -> Reconcil
                 "reason": reason,
                 "amount_paise": r["amount_paise"],
             })
+            refunds_citations.append(
+                Citation(
+                    source_id=r["source_id"],
+                    locator_id=r["row_locators"][0] if r["row_locators"] else "csv:r1",
+                    label=f"Refund {r['refund_id']} Excluded ({reason})",
+                )
+            )
 
     # 3. Fees calculation
     assessed_fees_paise = 0
@@ -197,6 +216,42 @@ async def reconcile(case_id: uuid.UUID, db: psycopg.AsyncConnection) -> Reconcil
                 "reason": "assessed_at at or after as_of cutoff",
                 "amount_paise": f["amount_paise"],
             })
+
+    # Attach manifest citations if any family is declared unknown in manifest
+    manifest_source_id = sources_by_name.get("manifest.json")
+    if manifest_source_id:
+        if completeness.get("fees") == "unknown":
+            fees_citations.append(
+                Citation(
+                    source_id=manifest_source_id,
+                    locator_id="text:l1-30",
+                    label="Manifest completeness: fees=unknown",
+                )
+            )
+        if completeness.get("refunds") == "unknown":
+            refunds_citations.append(
+                Citation(
+                    source_id=manifest_source_id,
+                    locator_id="text:l1-30",
+                    label="Manifest completeness: refunds=unknown",
+                )
+            )
+        if completeness.get("orders") == "unknown":
+            gross_citations.append(
+                Citation(
+                    source_id=manifest_source_id,
+                    locator_id="text:l1-30",
+                    label="Manifest completeness: orders=unknown",
+                )
+            )
+        if completeness.get("payouts") == "unknown" or completeness.get("payout_links") == "unknown":
+            received_citations.append(
+                Citation(
+                    source_id=manifest_source_id,
+                    locator_id="text:l1-30",
+                    label="Manifest completeness: payouts/links=unknown",
+                )
+            )
 
     # Expected net across cohort
     expected_net_paise = gross_paise - completed_refunds_paise - assessed_fees_paise
@@ -226,6 +281,14 @@ async def reconcile(case_id: uuid.UUID, db: psycopg.AsyncConnection) -> Reconcil
                     label=f"Payout Link {lk['link_id']} Received",
                 )
             )
+            if payout and payout.get("source_id"):
+                received_citations.append(
+                    Citation(
+                        source_id=payout["source_id"],
+                        locator_id=payout["row_locators"][0] if payout.get("row_locators") else "csv:r1",
+                        label=f"Payout {payout['payout_id']} Header",
+                    )
+                )
         else:
             received_excluded_links.append({
                 "link_id": lk["link_id"],
@@ -751,6 +814,7 @@ async def select_policy(
     all_citations: list[Citation] = []
     citations_seen: set[tuple[uuid.UUID, str]] = set()
 
+    all_matching_pols_by_id: dict[str, dict[str, Any]] = {}
     for o in orders:
         oid = o["order_id"]
         matching = order_to_matching[oid]
@@ -758,6 +822,9 @@ async def select_policy(
         if not matching:
             missing_policy_orders.append(oid)
             continue
+
+        for p in matching:
+            all_matching_pols_by_id[p["policy_id"]] = p
 
         distinct_terms = {(p["calendar_days"], p["fee_bps"]) for p in matching}
         if len(distinct_terms) > 1:
@@ -846,7 +913,8 @@ async def select_policy(
         })
 
     facts: list[Fact] = []
-    for pid, p in applicable_pols_by_id.items():
+    pols_for_facts = {**all_matching_pols_by_id, **applicable_pols_by_id}
+    for pid, p in pols_for_facts.items():
         locators = p["metadata_locators"] if isinstance(p["metadata_locators"], list) else json.loads(p["metadata_locators"])
         pol_cits = [
             Citation(
@@ -859,6 +927,16 @@ async def select_policy(
         facts.append(
             Fact(
                 fact_id=f"fact_{pid}_fee_rate",
+                kind="rate",
+                value=f"{p['fee_bps']} bps",
+                complete=True,
+                citations=pol_cits,
+                derivation={"policy_id": pid, "fee_bps": p["fee_bps"]},
+            )
+        )
+        facts.append(
+            Fact(
+                fact_id=f"fact_{pid}_fee_bps",
                 kind="rate",
                 value=f"{p['fee_bps']} bps",
                 complete=True,

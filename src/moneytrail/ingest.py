@@ -368,6 +368,14 @@ def validate_bundle(bundle_path: Path) -> dict[str, Any]:
                             details={"table": "orders", "locators": [f"csv:r{prev_row}", row_loc]},
                         )
                     )
+                    duplicate_findings.append(
+                        CaseFinding(
+                            code="DUPLICATE_IDENTICAL_ROW",
+                            severity="info",
+                            affected_record_ids=[oid],
+                            details={"table": "orders", "locators": [f"csv:r{prev_row}", row_loc]},
+                        )
+                    )
                 else:
                     raise ValueError(
                         f"Conflicting duplicate record ID '{oid}' in orders.csv: row {prev_row} vs row {row_idx}"
@@ -433,6 +441,14 @@ def validate_bundle(bundle_path: Path) -> dict[str, Any]:
                             details={"table": "refunds", "locators": [f"csv:r{prev_row}", row_loc]},
                         )
                     )
+                    duplicate_findings.append(
+                        CaseFinding(
+                            code="DUPLICATE_IDENTICAL_ROW",
+                            severity="info",
+                            affected_record_ids=[rid],
+                            details={"table": "refunds", "locators": [f"csv:r{prev_row}", row_loc]},
+                        )
+                    )
                 else:
                     raise ValueError(
                         f"Conflicting duplicate record ID '{rid}' in refunds.csv: row {prev_row} vs row {row_idx}"
@@ -488,6 +504,14 @@ def validate_bundle(bundle_path: Path) -> dict[str, Any]:
                     duplicate_findings.append(
                         CaseFinding(
                             code="DUPLICATE_ROW",
+                            severity="info",
+                            affected_record_ids=[fid],
+                            details={"table": "fees", "locators": [f"csv:r{prev_row}", row_loc]},
+                        )
+                    )
+                    duplicate_findings.append(
+                        CaseFinding(
+                            code="DUPLICATE_IDENTICAL_ROW",
                             severity="info",
                             affected_record_ids=[fid],
                             details={"table": "fees", "locators": [f"csv:r{prev_row}", row_loc]},
@@ -550,6 +574,14 @@ def validate_bundle(bundle_path: Path) -> dict[str, Any]:
                     duplicate_findings.append(
                         CaseFinding(
                             code="DUPLICATE_ROW",
+                            severity="info",
+                            affected_record_ids=[pid],
+                            details={"table": "payouts", "locators": [f"csv:r{prev_row}", row_loc]},
+                        )
+                    )
+                    duplicate_findings.append(
+                        CaseFinding(
+                            code="DUPLICATE_IDENTICAL_ROW",
                             severity="info",
                             affected_record_ids=[pid],
                             details={"table": "payouts", "locators": [f"csv:r{prev_row}", row_loc]},
@@ -622,6 +654,14 @@ def validate_bundle(bundle_path: Path) -> dict[str, Any]:
                             details={"table": "payout_links", "locators": [f"csv:r{prev_row}", row_loc]},
                         )
                     )
+                    duplicate_findings.append(
+                        CaseFinding(
+                            code="DUPLICATE_IDENTICAL_ROW",
+                            severity="info",
+                            affected_record_ids=[lid],
+                            details={"table": "payout_links", "locators": [f"csv:r{prev_row}", row_loc]},
+                        )
+                    )
                 else:
                     raise ValueError(
                         f"Conflicting duplicate record ID '{lid}' in payout_links.csv: row {prev_row} vs row {row_idx}"
@@ -655,6 +695,15 @@ def validate_bundle(bundle_path: Path) -> dict[str, Any]:
         # 2. Incomplete source families declared in manifest
         for fam, val in manifest.completeness.model_dump().items():
             if val == "unknown":
+                fam_code = f"INCOMPLETE_{fam.upper()}"
+                evidence_findings.append(
+                    CaseFinding(
+                        code=fam_code,
+                        severity="gap",
+                        affected_record_ids=[],
+                        details={"family": fam, "status": "unknown"},
+                    )
+                )
                 evidence_findings.append(
                     CaseFinding(
                         code="INCOMPLETE_SOURCE_FAMILY",
