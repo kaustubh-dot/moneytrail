@@ -179,15 +179,20 @@ def migrate_database(admin_dsn: str, writer_dsn: str, reader_dsn: str, sql_dir: 
     return applied_count
 
 
-async def get_writer_connection(settings: Settings) -> psycopg.AsyncConnection:
+async def get_writer_connection(settings: Settings, schema: str | None = None) -> psycopg.AsyncConnection:
     """Return an async connection with moneytrail_writer privileges."""
-    return await psycopg.AsyncConnection.connect(settings.database_url, autocommit=False)
+    conn = await psycopg.AsyncConnection.connect(settings.database_url, autocommit=False)
+    if schema:
+        await conn.execute(sql.SQL("SET search_path TO {}, public;").format(sql.Identifier(schema)))
+    return conn
 
 
-async def get_reader_connection(settings: Settings) -> psycopg.AsyncConnection:
+async def get_reader_connection(settings: Settings, schema: str | None = None) -> psycopg.AsyncConnection:
     """Return an async connection authenticated as moneytrail_reader in read-only mode."""
     conn = await psycopg.AsyncConnection.connect(settings.read_database_url, autocommit=False)
     await conn.set_read_only(True)
+    if schema:
+        await conn.execute(sql.SQL("SET search_path TO {}, public;").format(sql.Identifier(schema)))
     return conn
 
 

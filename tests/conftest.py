@@ -49,7 +49,12 @@ def test_db_schema(setup_settings: SetupSettings, test_schema_name: str):
             if os.path.exists(sql_path):
                 with open(sql_path, "r", encoding="utf-8") as f:
                     cur.execute(f.read())
-            # Grant scoped permissions
+            # Grant schema usage and table privileges
+            cur.execute(
+                sql.SQL("GRANT USAGE ON SCHEMA {} TO moneytrail_writer, moneytrail_reader;").format(
+                    sql.Identifier(test_schema_name)
+                )
+            )
             cur.execute(
                 sql.SQL("GRANT ALL ON ALL TABLES IN SCHEMA {} TO moneytrail_writer;").format(
                     sql.Identifier(test_schema_name)
@@ -67,3 +72,19 @@ def test_db_schema(setup_settings: SetupSettings, test_schema_name: str):
     with psycopg.connect(admin_dsn, autocommit=True) as conn:
         with conn.cursor() as cur:
             cur.execute(sql.SQL("DROP SCHEMA {} CASCADE;").format(sql.Identifier(test_schema_name)))
+
+
+@pytest.fixture
+def test_settings(base_settings: Settings, test_db_schema: str) -> Settings:
+    """Settings configured with search_path pointing to the isolated test schema."""
+    db_sep = "&" if "?" in base_settings.database_url else "?"
+    read_db_sep = "&" if "?" in base_settings.read_database_url else "?"
+    test_db_url = f"{base_settings.database_url}{db_sep}options=-c%20search_path%3D{test_db_schema}%2Cpublic"
+    test_read_db_url = f"{base_settings.read_database_url}{read_db_sep}options=-c%20search_path%3D{test_db_schema}%2Cpublic"
+
+    return base_settings.model_copy(
+        update={
+            "database_url": test_db_url,
+            "read_database_url": test_read_db_url,
+        }
+    )

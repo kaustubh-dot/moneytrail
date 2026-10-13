@@ -6,9 +6,9 @@ Updated 2026-10-13. Current state: documentation-only planning pack. Application
 
 ## Current position and next action
 
-Current phase: **Phase 1 — Safe storage and real uploads**. Exact next task: **MT1.1 — Establish SQL schema and database privileges**. Batch implementation authorization recorded.
+Current phase: **Phase 1 — Safe storage and real uploads**. Exact next task: **MT1.3 — Extract/index complete cases with source locators**. Batch implementation authorization recorded.
 
-Phase 0 completed and accepted via automated review-and-fix gate G0 (commit ec5b9c7, verdict PASS). Starting Phase 1.
+Phase 0 completed and accepted via automated review-and-fix gate G0 (commit ec5b9c7, verdict PASS). Phase 1 in progress.
 
 ## Canonical task list
 
@@ -23,7 +23,7 @@ A checkbox means the deliverable and minimal verification passed and evidence wa
 ### Phase 1 — Safe storage and real uploads
 
 - [x] **MT1.1** Establish schema, migrations, and restricted database roles. PRD: MT-03, MT-04, MT-11, MT-15. Depends on G0 approval.
-- [ ] **MT1.2** Validate supported bundles and atomic imports/deduplication. PRD: MT-01, MT-02, MT-03, MT-11. Depends on MT1.1.
+- [x] **MT1.2** Validate supported bundles and atomic imports/deduplication. PRD: MT-01, MT-02, MT-03, MT-11. Depends on MT1.1.
 - [ ] **MT1.3** Extract/index complete cases with source locators. PRD: MT-01, MT-02, MT-05, MT-07. Depends on MT1.2.
 - [ ] **MT1.4** Expose authenticated case/source APIs and security checks. PRD: MT-01, MT-02, MT-04, MT-11. Depends on MT1.3.
 
@@ -75,6 +75,7 @@ Implementation-start authorization: **Recorded (explicit batch authorization for
 
 ## Verification and checkpoint ledger
 
+- **MT1.2 (2026-10-14)**: Implemented `src/moneytrail/ingest.py` with bundle validation, logical fingerprint computation, strict CSV parsing, duplicate equality locators, conflicting ID rejection, transaction rollback/atomicity, and staging directory lifecycle. Updated `conftest.py` with schema usage grants for test isolation. Implemented `tests/test_import.py` verifying atomicity on injected mid-import failure (0 surviving rows in DB), idempotent duplicate re-import, whitespace/archive-order invariant fingerprinting, and conflicting ID rejection with row references. Executed `uv run python -m moneytrail.ingest validate fixtures/demo.zip` (valid: true, 5 orders, 3 refunds, 5 fees, 2 payouts, 4 links) and `pytest tests/test_import.py -q` (2 passed). Next action: MT1.3 — Extract/index complete cases with source locators.
 - **Phase 0 Gate G0 (2026-10-13)**: Independent review-and-fix subagent completed thorough evaluation of candidate commit `ec5b9c7269b7935feb47687a0498141362d4a5d1` on `implementation/build`. Verified dependency locks (`uv lock --check`), frontend typecheck (0 errors), config validation, model feasibility pilot (10/10 probes passed, zero illegal dispatches, fits in context, offline provider check), demo accounting identity (exact 24,000,000 gross, 1,800,000 refunds, 600,000 fees, 18,600,000 received, 3,000,000 pending, 0 diff), and split validation (12 dev + 18 test cases, 0 overlapping bundle hashes). Subagent returned PASS with zero defects. Phase 0 verified and accepted under user batch implementation authorization. Next action: MT1.1.
 - **MT0.3 (2026-10-13)**: Built canonical demo bundle (`fixtures/demo.zip` + `fixtures/demo/`) with 5 orders, refunds, fees, payouts, payout links, policy PDFs, and correspondence note matching exact demonstration accounting identity (Gross: 24,000,000 paise, refunds: 1,800,000, fees: 600,000, received: 18,600,000, pending: 3,000,000, unexplained difference: 0 paise). Built 12 development cases (`evals/dev/questions.jsonl` + 12 ZIP bundles) and 18 held-out test cases (`evals/test/questions.jsonl` + 18 ZIP bundles) across Family A, B, and C. Validated via `uv run python -m moneytrail.evaluation validate --split dev` and `--split test` (both passed). Confirmed 0 overlapping bundle/source hashes between dev and test. Next action: Phase 0 review-and-fix gate.
 - **MT0.2 (2026-10-13)**: Implemented `src/moneytrail/llm.py` with native `complete_structured`, AsyncClient, and `pilot` CLI. Model candidate Ollama `qwen3:8b` (digest `500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41`, Q4_K_M, Apache-2.0, native `think=false` verified). Pinned revisions: tokenizer `b968826d9c46dd6066d109eabc6255188de91218`, embedding `1110a243fdf4706b3f48f1d95db1a4f5529b4d41`, reranker `233902d25c440f23af6f7d6e94d2946bac0bee0a`. Executed `uv run python -m moneytrail.llm pilot --output evals/reports/phase0.json`: 10/10 contract probes parsed and passed (0 illegal dispatches); 5 warm requests measured ~3.8s latency; near-budget (~6,000 token) probe passed in 5.8s within 8,192 context window; offline provider check returned expected `MODEL_UNAVAILABLE`. Pilot gate: PASS. Next action: MT0.3 — Generate synthetic evidence and gold cases.
