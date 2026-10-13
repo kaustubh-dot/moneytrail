@@ -1,5 +1,6 @@
 """Document extraction, embedding, vector retrieval, and source locator inspection."""
 
+import asyncio
 import io
 import json
 import re
@@ -11,13 +12,14 @@ import psycopg
 from psycopg import sql
 from psycopg.rows import dict_row
 import pypdf
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import CrossEncoder, SentenceTransformer
 
 from moneytrail.config import Settings
 from moneytrail.schemas import SearchResult, SearchResultItem, SourceSegment
 
 
 _EMBEDDING_MODEL: SentenceTransformer | None = None
+_RERANKER_MODEL: CrossEncoder | None = None
 
 
 def get_embedding_model(settings: Settings) -> SentenceTransformer:
@@ -28,6 +30,16 @@ def get_embedding_model(settings: Settings) -> SentenceTransformer:
             settings.embedding_model, revision=settings.embedding_revision
         )
     return _EMBEDDING_MODEL
+
+
+def get_reranker_model(settings: Settings) -> CrossEncoder:
+    """Return cached CrossEncoder model instance with pinned revision."""
+    global _RERANKER_MODEL
+    if _RERANKER_MODEL is None:
+        _RERANKER_MODEL = CrossEncoder(
+            settings.reranker_model, revision=settings.reranker_revision
+        )
+    return _RERANKER_MODEL
 
 
 def parse_locator(locator_id: str) -> dict[str, Any]:
@@ -372,6 +384,92 @@ async def read_source(
     )
 
 
+def fuse_rrf(
+    dense_candidates: list[dict[str, Any]],
+    lexical_candidates: list[dict[str, Any]],
+    k: int = 60,
+    max_candidates: int = 20,
+) -> list[dict[str, Any]]:
+    """
+    Reciprocal-rank fusion using sum(1 / (k + rank)) with 1-based ranks.
+    Deduplicates candidates and breaks ties stably by (-rrf_score, source_id, locator_id).
+    Returns top max_candidates unique items.
+    """
+    scores: dict[str, float] = {}
+    items: dict[str, dict[str, Any]] = {}
+    dense_ranks: dict[str, int] = {}
+    lexical_ranks: dict[str, int] = {}
+
+    for rank, cand in enumerate(dense_candidates, start=1):
+        key = str(cand["chunk_id"])
+        scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank)
+        dense_ranks[key] = rank
+        if key not in items:
+            items[key] = cand
+
+    for rank, cand in enumerate(lexical_candidates, start=1):
+        key = str(cand["chunk_id"])
+        scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank)
+        lexical_ranks[key] = rank
+        if key not in items:
+            items[key] = cand
+
+    fused: list[dict[str, Any]] = []
+    for key, cand in items.items():
+        item_copy = dict(cand)
+        item_copy["rrf_score"] = scores[key]
+        item_copy["dense_rank"] = dense_ranks.get(key)
+        item_copy["lexical_rank"] = lexical_ranks.get(key)
+        fused.append(item_copy)
+
+    # Sort stably: highest rrf_score first, then source_id, then locator_id
+    fused.sort(
+        key=lambda x: (
+            -x["rrf_score"],
+            str(x["source_id"]),
+            str(x["locator_id"]),
+        )
+    )
+    return fused[:max_candidates]
+
+
+async def rerank_candidates(
+    query: str,
+    candidates: list[dict[str, Any]],
+    limit: int = 6,
+    settings: Settings | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Rerank fused candidates using pinned CrossEncoder model.
+    Breaks ties stably by (-rerank_score, source_id, locator_id).
+    Returns top limit items.
+    """
+    if not candidates:
+        return []
+
+    if settings is None:
+        settings = Settings.from_env()
+
+    reranker = get_reranker_model(settings)
+    pairs = [(query, cand["text"]) for cand in candidates]
+    scores = await asyncio.to_thread(reranker.predict, pairs)
+
+    reranked: list[dict[str, Any]] = []
+    for cand, score in zip(candidates, scores):
+        item_copy = dict(cand)
+        item_copy["rerank_score"] = float(score)
+        reranked.append(item_copy)
+
+    reranked.sort(
+        key=lambda x: (
+            -x["rerank_score"],
+            str(x["source_id"]),
+            str(x["locator_id"]),
+        )
+    )
+    return reranked[:limit]
+
+
 async def search_evidence(
     case_id: uuid.UUID,
     query: str,
@@ -381,11 +479,24 @@ async def search_evidence(
     db: psycopg.AsyncConnection | None = None,
 ) -> SearchResult:
     """
-    Search chunks for case using lexical full-text search with tsvector.
-    Retains final SearchResult shape and rank order.
+    Hybrid evidence search combining exact dense cosine search and full-text lexical search
+    via Reciprocal Rank Fusion (RRF constant 60) followed by CrossEncoder reranking.
+    Filters by immutable case ID, publication cutoff (published_at < as_of), and requested kind.
     """
+    if settings is None:
+        settings = Settings.from_env()
+
     if db is None:
-        raise ValueError("Database connection is required for search_evidence")
+        from moneytrail.db import get_reader_connection
+        async with await get_reader_connection(settings) as reader_conn:
+            return await search_evidence(
+                case_id=case_id,
+                query=query,
+                kind=kind,
+                limit=limit,
+                settings=settings,
+                db=reader_conn,
+            )
 
     query_filter = "WHERE c.case_id = %s"
     params: list[Any] = [case_id]
@@ -394,61 +505,175 @@ async def search_evidence(
         query_filter += " AND s.kind = %s"
         params.append(kind)
 
-    # Use websearch_to_tsquery for forgiving multi-word natural queries
-    sql_query = f"""
+    # 1. Exact dense cosine search (top 20)
+    emb_model = get_embedding_model(settings)
+    query_emb = await asyncio.to_thread(emb_model.encode, query)
+    emb_vector = query_emb.tolist() if hasattr(query_emb, "tolist") else list(query_emb)
+
+    dense_sql = f"""
         SELECT
             c.chunk_id,
             c.source_id,
             c.locator_id,
             c.text,
             s.kind,
-            ts_rank_cd(c.tsv, websearch_to_tsquery('english', %s)) AS score
+            s.relative_name,
+            p.policy_id,
+            p.effective_to,
+            cs.cohort_start,
+            1 - (c.embedding <=> %s::vector) AS dense_score
         FROM chunks c
-        JOIN sources s ON c.source_id = s.source_id
+        JOIN cases cs ON cs.case_id = c.case_id
+        JOIN sources s ON s.source_id = c.source_id
+        LEFT JOIN policies p ON p.source_id = s.source_id AND p.case_id = c.case_id
         {query_filter}
-        AND c.tsv @@ websearch_to_tsquery('english', %s)
-        ORDER BY score DESC, c.locator_id ASC
-        LIMIT %s;
+          AND (s.published_at IS NULL OR s.published_at < cs.as_of)
+        ORDER BY (c.embedding <=> %s::vector) ASC, s.source_id ASC, c.locator_id ASC
+        LIMIT 20;
     """
-    exec_params = [query, *params, query, limit]
+    dense_params = [emb_vector, *params, emb_vector]
 
-    items: list[SearchResultItem] = []
     async with db.cursor(row_factory=dict_row) as cur:
-        await cur.execute(sql_query, exec_params)
-        rows = await cur.fetchall()
+        await cur.execute(dense_sql, dense_params)
+        dense_rows = await cur.fetchall()
+        dense_candidates = [dict(r) for r in dense_rows]
 
-        # If strict websearch_to_tsquery matched no rows, fall back to plain or ilike for broad query
-        if not rows:
-            fallback_sql = f"""
-                SELECT
-                    c.chunk_id,
-                    c.source_id,
-                    c.locator_id,
-                    c.text,
-                    s.kind,
-                    0.5 AS score
-                FROM chunks c
-                JOIN sources s ON c.source_id = s.source_id
-                {query_filter}
-                AND c.text ILIKE %s
-                ORDER BY c.locator_id ASC
-                LIMIT %s;
-            """
-            fallback_params = [*params, f"%{query}%", limit]
-            await cur.execute(fallback_sql, fallback_params)
-            rows = await cur.fetchall()
+        # 2. PostgreSQL websearch_to_tsquery full-text search (top 20)
+        lexical_sql = f"""
+            SELECT
+                c.chunk_id,
+                c.source_id,
+                c.locator_id,
+                c.text,
+                s.kind,
+                s.relative_name,
+                p.policy_id,
+                p.effective_to,
+                cs.cohort_start,
+                ts_rank_cd(c.tsv, websearch_to_tsquery('english', %s)) AS lexical_score
+            FROM chunks c
+            JOIN cases cs ON cs.case_id = c.case_id
+            JOIN sources s ON s.source_id = c.source_id
+            LEFT JOIN policies p ON p.source_id = s.source_id AND p.case_id = c.case_id
+            {query_filter}
+              AND (s.published_at IS NULL OR s.published_at < cs.as_of)
+              AND c.tsv @@ websearch_to_tsquery('english', %s)
+            ORDER BY ts_rank_cd(c.tsv, websearch_to_tsquery('english', %s)) DESC, s.source_id ASC, c.locator_id ASC
+            LIMIT 20;
+        """
+        lexical_params = [query, *params, query, query]
+        await cur.execute(lexical_sql, lexical_params)
+        lexical_rows = await cur.fetchall()
+        lexical_candidates = [dict(r) for r in lexical_rows]
 
-        for rank, row in enumerate(rows, start=1):
-            items.append(
-                SearchResultItem(
-                    chunk_id=row["chunk_id"],
-                    source_id=row["source_id"],
-                    locator_id=row["locator_id"],
-                    text=row["text"],
-                    score=float(row["score"]),
-                    rank=rank,
-                    kind=row["kind"],
-                )
+        # If strict websearch_to_tsquery returned fewer than 20 results, supplement with OR query
+        if len(lexical_candidates) < 20:
+            words = [w for w in re.sub(r"[^A-Za-z0-9]", " ", query).split() if len(w) > 2]
+            if words:
+                or_query = " | ".join(words)
+                existing_ids = {r["chunk_id"] for r in lexical_candidates}
+                fallback_sql = f"""
+                    SELECT
+                        c.chunk_id,
+                        c.source_id,
+                        c.locator_id,
+                        c.text,
+                        s.kind,
+                        s.relative_name,
+                        p.policy_id,
+                        p.effective_to,
+                        cs.cohort_start,
+                        ts_rank_cd(c.tsv, to_tsquery('english', %s)) AS lexical_score
+                    FROM chunks c
+                    JOIN cases cs ON cs.case_id = c.case_id
+                    JOIN sources s ON s.source_id = c.source_id
+                    LEFT JOIN policies p ON p.source_id = s.source_id AND p.case_id = c.case_id
+                    {query_filter}
+                      AND (s.published_at IS NULL OR s.published_at < cs.as_of)
+                      AND c.tsv @@ to_tsquery('english', %s)
+                    ORDER BY ts_rank_cd(c.tsv, to_tsquery('english', %s)) DESC, s.source_id ASC, c.locator_id ASC
+                    LIMIT %s;
+                """
+                remaining = 20 - len(lexical_candidates)
+                fb_params = [or_query, *params, or_query, or_query, remaining]
+                try:
+                    await cur.execute(fallback_sql, fb_params)
+                    fb_rows = await cur.fetchall()
+                    for r in fb_rows:
+                        if r["chunk_id"] not in existing_ids:
+                            lexical_candidates.append(dict(r))
+                            existing_ids.add(r["chunk_id"])
+                except Exception:
+                    pass
+
+    # 3. Reciprocal Rank Fusion (top 20)
+    fused_candidates = fuse_rrf(
+        dense_candidates, lexical_candidates, k=60, max_candidates=20
+    )
+
+    # 4. Cross-Encoder reranking (top limit)
+    reranked_candidates = await rerank_candidates(
+        query=query,
+        candidates=fused_candidates,
+        limit=limit,
+        settings=settings,
+    )
+
+    # 5. Build SearchResultItem list with ranking metadata
+    items: list[SearchResultItem] = []
+    for rank, cand in enumerate(reranked_candidates, start=1):
+        is_superseded = False
+        if cand.get("effective_to") and cand.get("cohort_start"):
+            eff_to = cand["effective_to"]
+            c_start = cand["cohort_start"]
+            if hasattr(c_start, "date"):
+                c_start = c_start.date()
+            if hasattr(eff_to, "date"):
+                eff_to = eff_to.date()
+            if eff_to <= c_start:
+                is_superseded = True
+
+        item_meta: dict[str, Any] = {
+            "dense_score": cand.get("dense_score"),
+            "dense_rank": cand.get("dense_rank"),
+            "lexical_score": cand.get("lexical_score"),
+            "lexical_rank": cand.get("lexical_rank"),
+            "rrf_score": cand.get("rrf_score"),
+            "rerank_score": cand.get("rerank_score"),
+            "policy_id": cand.get("policy_id"),
+            "relative_name": cand.get("relative_name"),
+        }
+        if is_superseded:
+            item_meta["excluded_policy"] = True
+
+        items.append(
+            SearchResultItem(
+                chunk_id=cand["chunk_id"],
+                source_id=cand["source_id"],
+                locator_id=cand["locator_id"],
+                text=cand["text"],
+                score=float(cand.get("rerank_score", cand.get("rrf_score", 0.0))),
+                rank=rank,
+                kind=cand["kind"],
+                metadata=item_meta,
             )
+        )
 
-    return SearchResult(items=items, total=len(items))
+    search_metadata: dict[str, Any] = {
+        "query": query,
+        "kind": kind,
+        "dense_candidate_count": len(dense_candidates),
+        "lexical_candidate_count": len(lexical_candidates),
+        "fused_candidate_count": len(fused_candidates),
+        "selected_count": len(items),
+        "dense_top20_sources": [str(c["source_id"]) for c in dense_candidates[:20]],
+        "lexical_top20_sources": [str(c["source_id"]) for c in lexical_candidates[:20]],
+        "fused_top20_sources": [str(c["source_id"]) for c in fused_candidates[:20]],
+        "dense_top6_sources": [str(c["source_id"]) for c in dense_candidates[:6]],
+        "lexical_top6_sources": [str(c["source_id"]) for c in lexical_candidates[:6]],
+        "fused_top6_sources": [str(c["source_id"]) for c in fused_candidates[:6]],
+        "reranked_top6_sources": [str(it.source_id) for it in items[:6]],
+    }
+
+    return SearchResult(items=items, total=len(items), metadata=search_metadata)
+

@@ -85,11 +85,13 @@ class SearchResultItem(BaseModel):
     score: float
     rank: int
     kind: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class SearchResult(BaseModel):
     items: list[SearchResultItem]
     total: int
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 # --- Deterministic Facts and Investigation Tools ---

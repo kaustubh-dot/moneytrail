@@ -1148,6 +1148,149 @@ async def run_evaluation_async(
     print(f"\nCompleted {len(results)} cases. Output saved to {report_file}.")
 
 
+async def run_retrieval_async(
+    eval_root: Path, split: str, freeze_path: Path | None = None
+) -> bool:
+    from moneytrail.config import Settings
+    from moneytrail.ingest import import_bundle
+    from moneytrail.retrieval import search_evidence
+    from moneytrail.db import get_reader_connection
+
+    settings = Settings.from_env()
+    questions_file = eval_root / split / "questions.jsonl"
+    if not questions_file.exists():
+        raise FileNotFoundError(f"Questions file not found: {questions_file}")
+
+    items: list[dict[str, Any]] = []
+    with open(questions_file, "r", encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
+                items.append(json.loads(line.strip()))
+
+    eligible_items = []
+    zero_doc_items = []
+    for item in items:
+        if item.get("critical_document_ids"):
+            eligible_items.append(item)
+        else:
+            zero_doc_items.append(item["eval_id"])
+
+    print(f"\n======================================================================")
+    print(f"MoneyTrail Standalone Hybrid Retrieval Evaluation (Split: {split})")
+    print(f"======================================================================")
+    print(f"Total questions: {len(items)}")
+    print(f"Eligible questions (with critical documents): {len(eligible_items)}")
+    print(f"Excluded zero-document questions ({len(zero_doc_items)}): {zero_doc_items}")
+
+    methods = ["lexical", "dense", "fused", "reranked"]
+    families = sorted(list({item["family"] for item in eligible_items}))
+    denominators: dict[str, int] = {fam: 0 for fam in families}
+    denominators["pooled"] = 0
+
+    hits_top20: dict[str, dict[str, int]] = {m: {**{fam: 0 for fam in families}, "pooled": 0} for m in methods}
+    hits_top6: dict[str, dict[str, int]] = {m: {**{fam: 0 for fam in families}, "pooled": 0} for m in methods}
+
+    async with await get_reader_connection(settings) as reader_conn:
+        for idx, item in enumerate(eligible_items, start=1):
+            eval_id = item["eval_id"]
+            family = item["family"]
+            bundle_path = Path(item["bundle_path"])
+            crit_doc_ids = item["critical_document_ids"]
+            denominators[family] += len(crit_doc_ids)
+            denominators["pooled"] += len(crit_doc_ids)
+
+            import_res = await import_bundle(bundle_path, settings)
+            case_id = import_res.case_id
+
+            async with reader_conn.cursor() as cur:
+                await cur.execute(
+                    "SELECT policy_id, source_id FROM policies WHERE case_id = %s;",
+                    [case_id],
+                )
+                pol_rows = await cur.fetchall()
+                pol_map = {r[0]: str(r[1]) for r in pol_rows}
+
+            search_res = await search_evidence(
+                case_id=case_id,
+                query=item["question"],
+                kind="all",
+                limit=6,
+                settings=settings,
+                db=reader_conn,
+            )
+            meta = search_res.metadata
+
+            stage_sources = {
+                "lexical": {
+                    "top20": set(meta.get("lexical_top20_sources", [])),
+                    "top6": set(meta.get("lexical_top6_sources", [])),
+                },
+                "dense": {
+                    "top20": set(meta.get("dense_top20_sources", [])),
+                    "top6": set(meta.get("dense_top6_sources", [])),
+                },
+                "fused": {
+                    "top20": set(meta.get("fused_top20_sources", [])),
+                    "top6": set(meta.get("fused_top6_sources", [])),
+                },
+                "reranked": {
+                    "top20": set(meta.get("fused_top20_sources", [])),
+                    "top6": set(meta.get("reranked_top6_sources", [])),
+                },
+            }
+
+            for doc_id in crit_doc_ids:
+                target_src = pol_map.get(doc_id)
+                for m in methods:
+                    if target_src and target_src in stage_sources[m]["top20"]:
+                        hits_top20[m][family] += 1
+                        hits_top20[m]["pooled"] += 1
+                    if target_src and target_src in stage_sources[m]["top6"]:
+                        hits_top6[m][family] += 1
+                        hits_top6[m]["pooled"] += 1
+
+    print("\nRetrieval Recall Evaluation Results:")
+    print("-" * 75)
+    print(f"{'Method':<12} | {'Candidate Recall @ 20':<28} | {'Final Doc Recall @ 6':<28}")
+    print("-" * 75)
+
+    for m in methods:
+        p20_num = hits_top20[m]["pooled"]
+        p20_den = denominators["pooled"]
+        p20_pct = (p20_num / p20_den * 100) if p20_den else 0.0
+
+        p6_num = hits_top6[m]["pooled"]
+        p6_den = denominators["pooled"]
+        p6_pct = (p6_num / p6_den * 100) if p6_den else 0.0
+
+        print(f"{m:<12} | {p20_num}/{p20_den} ({p20_pct:6.2f}%)               | {p6_num}/{p6_den} ({p6_pct:6.2f}%)")
+
+    print("-" * 75)
+    print("\nPer-Family Breakdown (Reranked Final Recall @ 6):")
+    for fam in families:
+        f_num = hits_top6["reranked"][fam]
+        f_den = denominators[fam]
+        f_pct = (f_num / f_den * 100) if f_den else 0.0
+        print(f"  Family {fam}: {f_num}/{f_den} ({f_pct:6.2f}%)")
+
+    cand_recall_pooled = (hits_top20["reranked"]["pooled"] / denominators["pooled"]) if denominators["pooled"] else 0.0
+    final_recall_pooled = (hits_top6["reranked"]["pooled"] / denominators["pooled"]) if denominators["pooled"] else 0.0
+
+    print("-" * 75)
+    print(f"GATES SUMMARY (Split: {split}):")
+    print(f"  Candidate recall @ 20: {cand_recall_pooled:.4f} (gate >= 0.95)")
+    print(f"  Final document recall @ 6: {final_recall_pooled:.4f} (gate >= 0.90)")
+
+    pass_cand = cand_recall_pooled >= 0.95
+    pass_final = final_recall_pooled >= 0.90
+    if pass_cand and pass_final:
+        print("Retrieval Gate: PASS\n")
+        return True
+    else:
+        print("Retrieval Gate: FAIL\n")
+        return False
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="MoneyTrail Evaluation and Dataset Tools")
     subparsers = parser.add_subparsers(dest="subcommand")
@@ -1166,6 +1309,11 @@ if __name__ == "__main__":
     run_parser.add_argument("--eval-root", type=Path, default=Path("evals"))
     run_parser.add_argument("--output-dir", type=Path, default=Path("evals/reports"))
 
+    ret_parser = subparsers.add_parser("retrieval", help="Measure hybrid retrieval recall")
+    ret_parser.add_argument("--split", type=str, choices=["dev", "test"], required=True)
+    ret_parser.add_argument("--eval-root", type=Path, default=Path("evals"))
+    ret_parser.add_argument("--freeze", type=Path, default=None)
+
     args = parser.parse_args()
     if args.subcommand == "build-fixtures":
         build_all_fixtures(args.output, args.eval_root)
@@ -1175,5 +1323,10 @@ if __name__ == "__main__":
             exit(1)
     elif args.subcommand == "run":
         asyncio.run(run_evaluation_async(args.eval_root, args.split, args.mode, args.output_dir))
+    elif args.subcommand == "retrieval":
+        success = asyncio.run(run_retrieval_async(args.eval_root, args.split, args.freeze))
+        if not success:
+            exit(1)
     else:
         parser.print_help()
+
