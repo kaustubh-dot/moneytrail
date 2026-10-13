@@ -69,7 +69,7 @@ async def complete_structured(
             model=settings.model,
             messages=serialized_messages,
             format=schema,
-            options={"temperature": 0.0},
+            options={"temperature": 0.0, "repeat_penalty": 1.1},
             think=think,
         )
         resp = await asyncio.wait_for(coro, timeout=timeout_seconds)

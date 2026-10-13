@@ -6,9 +6,9 @@ Updated 2026-10-13. Current state: documentation-only planning pack. Application
 
 ## Current position and next action
 
-Current phase: **Phase 2 — Complete first investigation workflow**. Exact next task: **MT2.3 — Run live fixed investigations through authenticated APIs**. Batch implementation authorization recorded.
+Current phase: **Phase 2 — Complete first investigation workflow**. Exact next task: **MT2.4 — Complete upload/question/result/source UI and first live demo**. Batch implementation authorization recorded.
 
-Phase 1 completed and accepted via automated review-and-fix gate G1 (candidate 8286e98, verdict PASS). Phase 2 in progress.
+Phase 1 completed and accepted via automated review-and-fix gate G1 (candidate 8286e98, verdict PASS). Phase 2 in progress (MT2.1, MT2.2, MT2.3 completed).
 
 ## Canonical task list
 
@@ -31,7 +31,7 @@ A checkbox means the deliverable and minimal verification passed and evidence wa
 
 - [x] **MT2.1** Implement integer reconciliation and record inspection. PRD: MT-03, MT-04, MT-06. Depends on G1 approval.
 - [x] **MT2.2** Resolve effective policies and validate grounded result facts/citations. PRD: MT-02, MT-06, MT-07. Depends on MT2.1.
-- [ ] **MT2.3** Run live fixed investigations through authenticated APIs. PRD: MT-04, MT-06, MT-08, MT-09, MT-14. Depends on MT2.2.
+- [x] **MT2.3** Run live fixed investigations through authenticated APIs. PRD: MT-04, MT-06, MT-08, MT-09, MT-14. Depends on MT2.2.
 - [ ] **MT2.4** Complete upload/question/result/source UI and first live demo. PRD: MT-01, MT-02, MT-10, MT-11, MT-14. Depends on MT2.3.
 
 ### Phase 3 — Hybrid retrieval and richer evidence access
@@ -75,6 +75,7 @@ Implementation-start authorization: **Recorded (explicit batch authorization for
 
 ## Verification and checkpoint ledger
  
+- **MT2.3 (2026-10-14)**: Implemented fixed baseline investigation orchestration in `src/moneytrail/agent.py` (`run_fixed`, `assemble_context`, token budgeting with Qwen tokenizer, and reflection retry loop for ungrounded currency/citations) and authenticated lifecycle endpoints in `src/moneytrail/api.py` (`POST /api/v1/investigations` with 202 or 409 `RUN_BUSY`, `GET /api/v1/runs/{run_id}`, `GET /api/v1/runs/{run_id}/events`, `POST /api/v1/runs/{run_id}/cancel`, startup cleanup for interrupted runs). Added CLI subparser `run` in `src/moneytrail/evaluation.py`. Implemented comprehensive tests in `tests/test_workflow.py` (offline HTTP lifecycle, cancellation/terminal lock, offline provider failure, live fixed demo investigation). Executed `pytest tests/test_workflow.py -v` (4 passed), full evaluation across dev split `python -m moneytrail.evaluation run --split dev --mode fixed` (12/12 cases passed, 0 currency hallucinations, output saved to `evals/reports/dev_fixed.jsonl`), and full test suite `pytest -v` (26 passed). Next action: MT2.4 — Complete upload/question/result/source UI and first live demo.
 - **MT2.2 (2026-10-14)**: Implemented `src/moneytrail/tools.py` (`select_policy`) with cohort grouping (`order_ids=None`) and explicit order selection (<= 20 orders), publication cutoff filtering (`published_at < as_of`), effective interval matching (`effective_from <= date < effective_to`), conflict detection (`POLICY_CONFLICT`), and metadata citations. Began `src/moneytrail/agent.py` with `format_paise` (exact integer math without floating-point conversion), `expand_fact_tokens`, `check_currency_literals` (blocking raw currency numbers outside fact tokens), `validate_citations`, and `validate_result` (downgrading `explained` to `partial` upon critical findings/unresolved gaps, never upgrading model uncertainty). Implemented `tests/test_policy.py` and `tests/test_answer.py`. Executed `pytest tests/test_policy.py tests/test_answer.py -v` (13 passed) and full suite (22 passed). Next action: MT2.3 — Run live fixed investigations through authenticated APIs.
 - **MT2.1 (2026-10-14)**: Implemented `src/moneytrail/tools.py` with integer-paise cohort reconciliation (`reconcile`) and single-order record inspection (`inspect_order`). Handled strict exclusive cutoff (`< as_of`), completed refund deductions, assessed fees, effective payout link allocations, payout header vs link validation, independent pending classification, and signed unexplained difference. Implemented `tests/test_accounting.py` testing exact demo totals `(24000000, 1800000, 600000, 3000000, 18600000, 0)`, cutoff exclusion boundaries, and missing link non-pending gap behavior. Executed `pytest tests/test_accounting.py -q` (3 passed). Next action: MT2.2 — Resolve effective policies and validate grounded result facts/citations.
 - **Phase 1 Gate G1 (2026-10-14)**: Independent review-and-fix subagent completed evaluation of candidate commit `8286e98e727670e309cb6cbb411fa722a466a93b` on `implementation/build`. Verified schema migrations, restricted roles (`moneytrail_writer`, `moneytrail_reader`), bundle validation, atomic rollback on mid-import failure, idempotent duplicate re-import, source provenance (`csv:r<n>`, `pdf:p<page>:l<start>-<end>`, `text:l<start>-<end>`), full-text and vector chunk indexing, authenticated REST APIs (`/healthz`, `/api/v1/cases/import`, `/api/v1/cases`, `/api/v1/cases/{case_id}`, `/sources/{source_id}`, `/segments`, `/content`), constant-time token auth, cross-case 404 boundaries, read-only transaction write denial, archive traversal rejection, symlink rejection, and payload size limits (6/6 tests passed). Subagent hardened locator bounds, symlink rejection, duplicate archive members, and payload limits; returned verdict PASS. Phase 1 accepted under user batch implementation authorization. Next action: MT2.1.

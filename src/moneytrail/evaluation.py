@@ -1,10 +1,13 @@
 """Fixture generation, dataset validation, and evaluation framework for MoneyTrail."""
 
 import argparse
+import asyncio
 import hashlib
 import json
 import os
 import shutil
+import time
+import uuid
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -1073,6 +1076,78 @@ def validate_split(eval_root: Path, split: str) -> bool:
     return True
 
 
+async def run_evaluation_async(
+    eval_root: Path, split: str, mode: str, output_dir: Path
+) -> None:
+    from moneytrail.agent import run_fixed
+    from moneytrail.config import Settings
+    from moneytrail.ingest import import_bundle
+    from moneytrail.schemas import InvestigationRequest
+
+    settings = Settings.from_env()
+    questions_file = eval_root / split / "questions.jsonl"
+    if not questions_file.exists():
+        raise FileNotFoundError(f"Questions file not found: {questions_file}")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    report_file = output_dir / f"{split}_{mode}.jsonl"
+
+    items: list[dict[str, Any]] = []
+    with open(questions_file, "r", encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
+                items.append(json.loads(line.strip()))
+
+    print(f"Running {len(items)} evaluation cases from {split} split in mode={mode}...")
+    results: list[dict[str, Any]] = []
+
+    for idx, item in enumerate(items, start=1):
+        eval_id = item["eval_id"]
+        bundle_path = Path(item["bundle_path"])
+        if not bundle_path.exists():
+            print(f"[{eval_id}] Bundle missing: {bundle_path}")
+            continue
+
+        print(f"[{idx}/{len(items)}] Evaluating {eval_id}: {item['question']}")
+        # Import bundle
+        import_res = await import_bundle(bundle_path, settings)
+        case_id = import_res.case_id
+
+        run_id = uuid.uuid4()
+        req = InvestigationRequest(case_id=case_id, question=item["question"])
+
+        t0 = time.perf_counter()
+        if mode == "fixed":
+            inv_res = await run_fixed(req, run_id, settings)
+        else:
+            raise NotImplementedError(f"Mode {mode} not implemented yet")
+        elapsed = round(time.perf_counter() - t0, 3)
+
+        res_record = {
+            "eval_id": eval_id,
+            "family": item["family"],
+            "question": item["question"],
+            "elapsed_s": elapsed,
+            "outcome": inv_res.outcome,
+            "expected_outcome": item.get("expected_outcome"),
+            "claims": [c.text for c in inv_res.claims],
+            "selected_facts": [f.fact_id for f in inv_res.selected_facts],
+            "citations": [c.locator_id for c in inv_res.citations],
+            "unresolved": [g.code for g in inv_res.unresolved],
+        }
+        results.append(res_record)
+        print(
+            f"  -> Outcome: {inv_res.outcome} (expected: {item.get('expected_outcome')}) "
+            f"in {elapsed}s | Claims: {len(inv_res.claims)} | Citations: {len(inv_res.citations)}"
+        )
+
+    with open(report_file, "w", encoding="utf-8") as f:
+        for r in results:
+            f.write(json.dumps(r) + "\n")
+
+    print(f"\nCompleted {len(results)} cases. Output saved to {report_file}.")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="MoneyTrail Evaluation and Dataset Tools")
     subparsers = parser.add_subparsers(dest="subcommand")
@@ -1085,6 +1160,12 @@ if __name__ == "__main__":
     val_parser.add_argument("--split", type=str, choices=["dev", "test"], required=True)
     val_parser.add_argument("--eval-root", type=Path, default=Path("evals"))
 
+    run_parser = subparsers.add_parser("run", help="Run evaluations against dev or test cases")
+    run_parser.add_argument("--split", type=str, choices=["dev", "test"], required=True)
+    run_parser.add_argument("--mode", type=str, choices=["fixed", "agent"], default="fixed")
+    run_parser.add_argument("--eval-root", type=Path, default=Path("evals"))
+    run_parser.add_argument("--output-dir", type=Path, default=Path("evals/reports"))
+
     args = parser.parse_args()
     if args.subcommand == "build-fixtures":
         build_all_fixtures(args.output, args.eval_root)
@@ -1092,5 +1173,7 @@ if __name__ == "__main__":
         ok = validate_split(args.eval_root, args.split)
         if not ok:
             exit(1)
+    elif args.subcommand == "run":
+        asyncio.run(run_evaluation_async(args.eval_root, args.split, args.mode, args.output_dir))
     else:
         parser.print_help()

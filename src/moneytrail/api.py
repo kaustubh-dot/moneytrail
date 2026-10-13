@@ -18,15 +18,19 @@ import psycopg
 from psycopg import sql
 from psycopg.rows import dict_row
 
+import time
+from moneytrail.agent import run_fixed
 from moneytrail.config import ZIP_MAX_COMPRESSED_BYTES, Settings
 from moneytrail.db import get_reader_connection, get_writer_connection
 from moneytrail.ingest import import_bundle
+from moneytrail.llm import LLMError
 from moneytrail.retrieval import read_source
-from moneytrail.schemas import ImportResult, SourceSegment
+from moneytrail.schemas import ImportResult, InvestigationRequest, SourceSegment
 
 
 # Global workload lock to enforce single active local workload (import or investigation run)
 _WORKLOAD_LOCK = asyncio.Lock()
+_ACTIVE_RUNS: dict[uuid.UUID, asyncio.Event] = {}
 
 
 def get_settings() -> Settings:
@@ -72,7 +76,7 @@ def create_app(custom_settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app_instance: FastAPI):
-        """Clean up orphan staging directories on startup."""
+        """Clean up orphan staging directories and mark interrupted runs as failed on startup."""
         try:
             settings = resolve_settings()
             staging_root = settings.data_dir / "staging"
@@ -80,6 +84,24 @@ def create_app(custom_settings: Settings | None = None) -> FastAPI:
                 for orphan in staging_root.iterdir():
                     if orphan.is_dir():
                         shutil.rmtree(orphan, ignore_errors=True)
+
+            try:
+                w_conn = await get_writer_connection(settings)
+                try:
+                    async with w_conn.cursor() as cur:
+                        await cur.execute(
+                            """
+                            UPDATE runs
+                            SET state = 'failed', finished_at = NOW(),
+                                error = '{"code": "PROCESS_INTERRUPTED", "message": "Run interrupted by process restart"}'::jsonb
+                            WHERE state = 'running';
+                            """
+                        )
+                    await w_conn.commit()
+                finally:
+                    await w_conn.close()
+            except Exception:
+                pass
         except Exception:
             pass
         yield
@@ -400,6 +422,274 @@ def create_app(custom_settings: Settings | None = None) -> FastAPI:
             )
         finally:
             await reader_conn.close()
+
+    # --- Investigation Runs Endpoints ---
+
+    @app.post("/api/v1/investigations", status_code=status.HTTP_202_ACCEPTED)
+    async def start_investigation(
+        req: InvestigationRequest,
+        token: str = Depends(verify_owner_token),
+    ):
+        settings = resolve_settings()
+        reader_conn = await get_reader_connection(settings)
+        try:
+            async with reader_conn.cursor() as cur:
+                await cur.execute("SELECT case_id FROM cases WHERE case_id = %s;", [req.case_id])
+                if not await cur.fetchone():
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail={"code": "CASE_NOT_FOUND", "message": f"Case {req.case_id} not found"},
+                    )
+        finally:
+            await reader_conn.close()
+
+        if _WORKLOAD_LOCK.locked():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": "RUN_BUSY", "message": "Another workload or investigation is currently running"},
+            )
+
+        run_id = uuid.uuid4()
+        writer_conn = await get_writer_connection(settings)
+        try:
+            async with writer_conn.cursor() as cur:
+                await cur.execute(
+                    """
+                    INSERT INTO runs (run_id, case_id, mode, question, state, started_at, cancel_requested, hashes)
+                    VALUES (%s, %s, 'fixed', %s, 'running', NOW(), FALSE, %s);
+                    """,
+                    [run_id, req.case_id, req.question, json.dumps({"model": settings.model})],
+                )
+            await writer_conn.commit()
+        finally:
+            await writer_conn.close()
+
+        cancel_event = asyncio.Event()
+        _ACTIVE_RUNS[run_id] = cancel_event
+
+        async def _bg_run():
+            async with _WORKLOAD_LOCK:
+                start_time = time.perf_counter()
+                seq = 0
+
+                async def record_event(kind: str, payload: dict[str, Any]):
+                    nonlocal seq
+                    seq += 1
+                    elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+                    w_conn = await get_writer_connection(settings)
+                    try:
+                        async with w_conn.cursor() as cur:
+                            await cur.execute(
+                                """
+                                INSERT INTO run_events (run_id, sequence, timestamp, kind, elapsed_ms, payload)
+                                VALUES (%s, %s, NOW(), %s, %s, %s);
+                                """ ,
+                                [run_id, seq, kind, elapsed_ms, json.dumps(payload)],
+                            )
+                        await w_conn.commit()
+                    finally:
+                        await w_conn.close()
+
+                w_conn = await get_writer_connection(settings)
+                try:
+                    await record_event("run_started", {"case_id": str(req.case_id), "question": req.question})
+
+                    result = await run_fixed(
+                        req,
+                        run_id,
+                        settings,
+                        cancel_event=cancel_event,
+                        record_event_fn=record_event,
+                    )
+
+                    if cancel_event.is_set():
+                        async with w_conn.cursor() as cur:
+                            await cur.execute(
+                                "UPDATE runs SET state = 'cancelled', finished_at = NOW() WHERE run_id = %s;",
+                                [run_id],
+                            )
+                        await w_conn.commit()
+                        await record_event("cancel_requested", {"reason": "Cancelled by user"})
+                    else:
+                        async with w_conn.cursor() as cur:
+                            await cur.execute(
+                                """
+                                UPDATE runs
+                                SET state = 'completed', finished_at = NOW(), result = %s
+                                WHERE run_id = %s;
+                                """ ,
+                                [json.dumps(result.model_dump(mode="json")), run_id],
+                            )
+                        await w_conn.commit()
+
+                except asyncio.CancelledError:
+                    async with w_conn.cursor() as cur:
+                        await cur.execute(
+                            "UPDATE runs SET state = 'cancelled', finished_at = NOW() WHERE run_id = %s;",
+                            [run_id],
+                        )
+                    await w_conn.commit()
+                    await record_event("cancel_requested", {"reason": "Task cancelled"})
+
+                except LLMError as e:
+                    err_payload = {"code": e.code, "message": e.message, "details": e.details}
+                    async with w_conn.cursor() as cur:
+                        await cur.execute(
+                            """
+                            UPDATE runs
+                            SET state = 'failed', finished_at = NOW(), error = %s
+                            WHERE run_id = %s;
+                            """ ,
+                            [json.dumps(err_payload), run_id],
+                        )
+                    await w_conn.commit()
+                    await record_event("run_finished", {"error": err_payload})
+
+                except Exception as e:
+                    err_payload = {"code": "INTERNAL_ERROR", "message": str(e)}
+                    async with w_conn.cursor() as cur:
+                        await cur.execute(
+                            """
+                            UPDATE runs
+                            SET state = 'failed', finished_at = NOW(), error = %s
+                            WHERE run_id = %s;
+                            """ ,
+                            [json.dumps(err_payload), run_id],
+                        )
+                    await w_conn.commit()
+                    await record_event("run_finished", {"error": err_payload})
+
+                finally:
+                    _ACTIVE_RUNS.pop(run_id, None)
+                    await w_conn.close()
+
+        asyncio.create_task(_bg_run())
+        return {"run_id": run_id, "state": "running"}
+
+    @app.get("/api/v1/runs/{run_id}")
+    async def get_run(
+        run_id: uuid.UUID,
+        token: str = Depends(verify_owner_token),
+    ):
+        settings = resolve_settings()
+        conn = await get_writer_connection(settings)
+        try:
+            async with conn.cursor(row_factory=dict_row) as cur:
+                await cur.execute(
+                    """
+                    SELECT run_id, case_id, state, result, error, started_at, finished_at
+                    FROM runs
+                    WHERE run_id = %s;
+                    """,
+                    [run_id],
+                )
+                row = await cur.fetchone()
+                if not row:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail={"code": "RUN_NOT_FOUND", "message": f"Run {run_id} not found"},
+                    )
+                return {
+                    "run_id": row["run_id"],
+                    "case_id": row["case_id"],
+                    "state": row["state"],
+                    "result": row["result"],
+                    "error": row["error"],
+                    "started_at": row["started_at"].isoformat() if row["started_at"] else None,
+                    "finished_at": row["finished_at"].isoformat() if row["finished_at"] else None,
+                }
+        finally:
+            await conn.close()
+
+    @app.get("/api/v1/runs/{run_id}/events")
+    async def get_run_events(
+        run_id: uuid.UUID,
+        after: int = Query(0, ge=0),
+        token: str = Depends(verify_owner_token),
+    ):
+        settings = resolve_settings()
+        conn = await get_writer_connection(settings)
+        try:
+            async with conn.cursor(row_factory=dict_row) as cur:
+                await cur.execute("SELECT state FROM runs WHERE run_id = %s;", [run_id])
+                run_row = await cur.fetchone()
+                if not run_row:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail={"code": "RUN_NOT_FOUND", "message": f"Run {run_id} not found"},
+                    )
+
+                terminal = run_row["state"] in ("completed", "failed", "cancelled")
+
+                await cur.execute(
+                    """
+                    SELECT run_id, sequence, timestamp, kind, elapsed_ms, payload
+                    FROM run_events
+                    WHERE run_id = %s AND sequence > %s
+                    ORDER BY sequence ASC
+                    LIMIT 100;
+                    """,
+                    [run_id, after],
+                )
+                rows = await cur.fetchall()
+
+                events = [
+                    {
+                        "run_id": str(r["run_id"]),
+                        "sequence": r["sequence"],
+                        "timestamp": r["timestamp"].isoformat(),
+                        "kind": r["kind"],
+                        "elapsed_ms": r["elapsed_ms"],
+                        "payload": r["payload"],
+                    }
+                    for r in rows
+                ]
+                next_after = rows[-1]["sequence"] if rows else after
+                return {
+                    "events": events,
+                    "next_after": next_after,
+                    "terminal": terminal,
+                }
+        finally:
+            await conn.close()
+
+    @app.post("/api/v1/runs/{run_id}/cancel")
+    async def cancel_run(
+        run_id: uuid.UUID,
+        response: Response,
+        token: str = Depends(verify_owner_token),
+    ):
+        settings = resolve_settings()
+        conn = await get_writer_connection(settings)
+        try:
+            async with conn.cursor(row_factory=dict_row) as cur:
+                await cur.execute("SELECT state, cancel_requested FROM runs WHERE run_id = %s;", [run_id])
+                run_row = await cur.fetchone()
+                if not run_row:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail={"code": "RUN_NOT_FOUND", "message": f"Run {run_id} not found"},
+                    )
+
+                curr_state = run_row["state"]
+                if curr_state in ("completed", "failed", "cancelled"):
+                    response.status_code = status.HTTP_200_OK
+                    return {"run_id": run_id, "state": curr_state}
+
+                await cur.execute(
+                    "UPDATE runs SET cancel_requested = TRUE WHERE run_id = %s;",
+                    [run_id],
+                )
+            await conn.commit()
+
+            if run_id in _ACTIVE_RUNS:
+                _ACTIVE_RUNS[run_id].set()
+
+            response.status_code = status.HTTP_202_ACCEPTED
+            return {"run_id": run_id, "state": "cancelling"}
+        finally:
+            await conn.close()
+
 
     return app
 
