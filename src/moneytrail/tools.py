@@ -980,6 +980,10 @@ async def select_policy(
             )
             for loc in locators
         ]
+        for c in pol_cits:
+            if (c.source_id, c.locator_id) not in citations_seen:
+                citations_seen.add((c.source_id, c.locator_id))
+                all_citations.append(c)
         for p_key in {pid, pid.lower(), pid.upper()}:
             fid_rate = f"fact_{p_key}_fee_rate"
             if fid_rate not in seen_fids:
