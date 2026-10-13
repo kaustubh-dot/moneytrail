@@ -20,7 +20,7 @@ from psycopg import sql
 from psycopg.rows import dict_row
 
 import time
-from moneytrail.agent import run_fixed
+from moneytrail.agent import run_agent, run_fixed
 from moneytrail.config import ZIP_MAX_COMPRESSED_BYTES, Settings
 from moneytrail.db import get_reader_connection, get_writer_connection
 from moneytrail.ingest import import_bundle
@@ -451,15 +451,16 @@ def create_app(custom_settings: Settings | None = None) -> FastAPI:
             )
 
         run_id = uuid.uuid4()
+        mode = req.mode or "agent"
         writer_conn = await get_writer_connection(settings)
         try:
             async with writer_conn.cursor() as cur:
                 await cur.execute(
                     """
                     INSERT INTO runs (run_id, case_id, mode, question, state, started_at, cancel_requested, hashes)
-                    VALUES (%s, %s, 'fixed', %s, 'running', NOW(), FALSE, %s);
+                    VALUES (%s, %s, %s, %s, 'running', NOW(), FALSE, %s);
                     """,
-                    [run_id, req.case_id, req.question, json.dumps({"model": settings.model})],
+                    [run_id, req.case_id, mode, req.question, json.dumps({"model": settings.model})],
                 )
             await writer_conn.commit()
         finally:
@@ -493,15 +494,24 @@ def create_app(custom_settings: Settings | None = None) -> FastAPI:
 
                 w_conn = await get_writer_connection(settings)
                 try:
-                    await record_event("run_started", {"case_id": str(req.case_id), "question": req.question})
+                    await record_event("run_started", {"case_id": str(req.case_id), "question": req.question, "mode": mode})
 
-                    result = await run_fixed(
-                        req,
-                        run_id,
-                        settings,
-                        cancel_event=cancel_event,
-                        record_event_fn=record_event,
-                    )
+                    if mode == "fixed":
+                        result = await run_fixed(
+                            req,
+                            run_id,
+                            settings,
+                            cancel_event=cancel_event,
+                            record_event_fn=record_event,
+                        )
+                    else:
+                        result = await run_agent(
+                            req,
+                            run_id,
+                            settings,
+                            cancel_event=cancel_event,
+                            record_event_fn=record_event,
+                        )
 
                     if cancel_event.is_set():
                         async with w_conn.cursor() as cur:

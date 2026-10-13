@@ -231,6 +231,7 @@ class Decision(BaseModel):
 class InvestigationRequest(BaseModel):
     case_id: UUID
     question: str
+    mode: Literal["fixed", "agent"] = "agent"
 
 
 class InvestigationResult(BaseModel):
@@ -274,6 +275,7 @@ class InvestigationState(BaseModel):
     tool_calls_used: int = 0
     model_turns_used: int = 0
     deadline: datetime | None = None
+    deadline_monotonic: float | None = None
     cancelled: bool = False
     facts: list[Fact] = Field(default_factory=list)
     evidence: list[dict[str, Any]] = Field(default_factory=list)
@@ -283,9 +285,16 @@ class InvestigationState(BaseModel):
     last_decision: Decision | None = None
     valid_citations: set[tuple[UUID, str]] = Field(default_factory=set)
     reconciliation: Reconciliation | None = None
+    tool_history: list[dict[str, Any]] = Field(default_factory=list)
+    retries_used: int = 0
+    result: InvestigationResult | None = None
+    error: dict[str, Any] | None = None
+    validation_error: str | None = None
 
 
 class ContextPacket(BaseModel):
     messages: list[ChatMessage]
     token_count: int
     omitted_chunks: int = 0
+    selected_sources: list[UUID] = Field(default_factory=list)
+    registered_facts: list[str] = Field(default_factory=list)

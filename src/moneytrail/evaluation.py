@@ -1079,7 +1079,7 @@ def validate_split(eval_root: Path, split: str) -> bool:
 async def run_evaluation_async(
     eval_root: Path, split: str, mode: str, output_dir: Path
 ) -> None:
-    from moneytrail.agent import run_fixed
+    from moneytrail.agent import run_agent, run_fixed
     from moneytrail.config import Settings
     from moneytrail.ingest import import_bundle
     from moneytrail.schemas import InvestigationRequest
@@ -1114,13 +1114,15 @@ async def run_evaluation_async(
         case_id = import_res.case_id
 
         run_id = uuid.uuid4()
-        req = InvestigationRequest(case_id=case_id, question=item["question"])
+        req = InvestigationRequest(case_id=case_id, question=item["question"], mode=mode)
 
         t0 = time.perf_counter()
         if mode == "fixed":
             inv_res = await run_fixed(req, run_id, settings)
+        elif mode == "agent":
+            inv_res = await run_agent(req, run_id, settings)
         else:
-            raise NotImplementedError(f"Mode {mode} not implemented yet")
+            raise ValueError(f"Unknown evaluation mode: {mode}")
         elapsed = round(time.perf_counter() - t0, 3)
 
         res_record = {
@@ -1134,6 +1136,7 @@ async def run_evaluation_async(
             "selected_facts": [f.fact_id for f in inv_res.selected_facts],
             "citations": [c.locator_id for c in inv_res.citations],
             "unresolved": [g.code for g in inv_res.unresolved],
+            "budget_summary": inv_res.budget_summary,
         }
         results.append(res_record)
         print(
