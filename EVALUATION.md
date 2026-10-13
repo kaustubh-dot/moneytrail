@@ -1,6 +1,6 @@
 # MoneyTrail evaluation and verification protocol
 
-Planning baseline v1, 2026-10-13. No results have been measured. This document implements PRD MT-02 through MT-15 without a coverage target or a large testing framework. TASKS holds execution status; this file holds the protocol. A correct JSON shape or a smooth demonstration is not sufficient evidence of a correct investigation.
+Measured development baseline, 2026-10-14 (12 dev cases captured in `evals/reports/dev_fixed.jsonl`; standalone retrieval candidate recall 1.0000, final document recall 1.0000). This document implements PRD MT-02 through MT-15 without a coverage target or a large testing framework. TASKS holds execution status; this file holds the protocol. A correct JSON shape or a smooth demonstration is not sufficient evidence of a correct investigation.
 
 ## Datasets and contamination controls
 
