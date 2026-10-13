@@ -6,9 +6,9 @@ Updated 2026-10-13. Current state: documentation-only planning pack. Application
 
 ## Current position and next action
 
-Current phase: **Phase 0 — Scope, data, and model feasibility**. Exact next task: **MT0.2 — Measure exact local model capability/context/performance**. Batch implementation authorization recorded.
+Current phase: **Phase 0 — Scope, data, and model feasibility**. Exact next task: **MT0.3 — Generate/review synthetic evidence, independent gold, and v1 scope**. Batch implementation authorization recorded.
 
-Blockers: **none**. Docker is missing and sudo requires password; pgvector PostgreSQL-16 registry digest resolved for phase 1. Ollama 0.40.3 installed locally and model candidate qwen3:8b pulled.
+Blockers: **none**. Docker missing and sudo requires password; pgvector PostgreSQL-16 registry digest resolved for phase 1. Model feasibility passed (10/10 probes, ~3.8s warm latency).
 
 ## Canonical task list
 
@@ -17,7 +17,7 @@ A checkbox means the deliverable and minimal verification passed and evidence wa
 ### Phase 0 — Scope, data, and model feasibility
 
 - [x] **MT0.1** Lock runtime dependencies/configuration. PRD: MT-13, MT-15, MT-16. Depends on implementation authorization.
-- [ ] **MT0.2** Measure exact local model capability/context/performance. PRD: MT-08, MT-09, MT-13. Depends on MT0.1.
+- [x] **MT0.2** Measure exact local model capability/context/performance. PRD: MT-08, MT-09, MT-13. Depends on MT0.1.
 - [ ] **MT0.3** Generate/review synthetic evidence, independent gold, and v1 scope. PRD: MT-01, MT-03, MT-07, MT-12, MT-16. Depends on MT0.1–MT0.2.
 
 ### Phase 1 — Safe storage and real uploads
@@ -75,6 +75,7 @@ Implementation-start authorization: **Recorded (explicit batch authorization for
 
 ## Verification and checkpoint ledger
 
+- **MT0.2 (2026-10-13)**: Implemented `src/moneytrail/llm.py` with native `complete_structured`, AsyncClient, and `pilot` CLI. Model candidate Ollama `qwen3:8b` (digest `500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41`, Q4_K_M, Apache-2.0, native `think=false` verified). Pinned revisions: tokenizer `b968826d9c46dd6066d109eabc6255188de91218`, embedding `1110a243fdf4706b3f48f1d95db1a4f5529b4d41`, reranker `233902d25c440f23af6f7d6e94d2946bac0bee0a`. Executed `uv run python -m moneytrail.llm pilot --output evals/reports/phase0.json`: 10/10 contract probes parsed and passed (0 illegal dispatches); 5 warm requests measured ~3.8s latency; near-budget (~6,000 token) probe passed in 5.8s within 8,192 context window; offline provider check returned expected `MODEL_UNAVAILABLE`. Pilot gate: PASS. Next action: MT0.3 — Generate synthetic evidence and gold cases.
 - **MT0.1 (2026-10-13)**: Installed Python 3.12.3, uv 0.11.27, Node v24.19.0, npm 9.2.0, Ollama 0.40.3; hardware measured: Intel Core Ultra 9 285, 125 GiB RAM; recorded pgvector Docker image `pgvector/pgvector:pg16` digest `sha256:a97d77306ff47cc1d8add4d000cec2207da2e110746318df3137ce53c337ca30`. Generated ignored `.env` and `.env.setup` with local secrets via `secrets.token_urlsafe(32)`. Verified imports via `uv run python -c "import fastapi,pydantic,psycopg,ollama,langgraph,sentence_transformers,pypdf; print('imports-ok')"` -> `imports-ok`. Verified Settings missing-token failure behavior. Verified frontend TypeScript check via `npm --prefix frontend run typecheck` (0 errors). Next action: MT0.2 — Measure local model candidate.
 
 No implementation verification entries exist prior to MT0.1. Append one compact entry per meaningful checkpoint with task IDs, date, exact commands, actual outcomes/report paths, commit hash, remaining limits, and next action. Preserve failed checks and their causes; do not copy expected command output from ROADMAP as observed success.
