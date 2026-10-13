@@ -20,6 +20,7 @@ from psycopg.rows import dict_row
 import pypdf
 
 from moneytrail.config import (
+    CSV_MAX_TOTAL_RECORDS,
     DOC_MAX_BYTES,
     PDF_MAX_PAGES,
     ZIP_MAX_COMPRESSED_BYTES,
@@ -126,7 +127,17 @@ def _parse_policy_text(pdf_bytes: bytes, source_id: uuid.UUID) -> tuple[dict[str
     Returns (policy_data_dict, metadata_locators).
     """
     import io
-    reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
+    try:
+        reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
+    except Exception as e:
+        raise ValueError(f"Failed to read policy PDF: {e}")
+
+    if reader.is_encrypted:
+        raise ValueError("UNSUPPORTED_PDF: Encrypted PDF rejected; supply unencrypted selectable text.")
+
+    if len(reader.pages) > PDF_MAX_PAGES:
+        raise ValueError(f"PDF page count ({len(reader.pages)}) exceeds limit ({PDF_MAX_PAGES})")
+
     all_lines: list[tuple[int, int, str]] = []  # (page_1based, line_1based, text)
     for p_idx, page in enumerate(reader.pages):
         page_text = page.extract_text() or ""
@@ -134,8 +145,12 @@ def _parse_policy_text(pdf_bytes: bytes, source_id: uuid.UUID) -> tuple[dict[str
         for l_idx, line in enumerate(lines):
             all_lines.append((p_idx + 1, l_idx + 1, line))
 
+    if not all_lines:
+        raise ValueError("UNSUPPORTED_PDF: Scanned PDF without selectable text rejected; supply selectable text.")
+
     metadata: dict[str, str] = {}
     metadata_locators: list[str] = []
+    field_locators: dict[str, str] = {}
 
     required_keys = {
         "Policy-ID": "policy_id",
@@ -153,7 +168,9 @@ def _parse_policy_text(pdf_bytes: bytes, source_id: uuid.UUID) -> tuple[dict[str
                 if key in metadata and metadata[key] != val:
                     raise ValueError(f"Contradictory policy metadata for {prefix}: {metadata[key]} vs {val}")
                 metadata[key] = val
-                metadata_locators.append(f"pdf:p{p_num}:l{l_num}")
+                loc = f"pdf:p{p_num}:l{l_num}"
+                metadata_locators.append(loc)
+                field_locators[key] = loc
 
     missing = [k for k, prop in required_keys.items() if prop not in metadata]
     if missing:
@@ -161,12 +178,19 @@ def _parse_policy_text(pdf_bytes: bytes, source_id: uuid.UUID) -> tuple[dict[str
 
     # Parse fields
     policy_id = metadata["policy_id"]
-    pub_dt = _parse_iso_datetime(metadata["published_at"], "Published-At", metadata_locators[1])
+    pub_dt = _parse_iso_datetime(metadata["published_at"], "Published-At", field_locators["published_at"])
     eff_from = date.fromisoformat(metadata["effective_from"])
     eff_to_str = metadata["effective_to"].strip()
     eff_to = None if eff_to_str.lower() == "open" else date.fromisoformat(eff_to_str)
+    if eff_to and eff_to <= eff_from:
+        raise ValueError(f"Effective-To ({eff_to}) must be after Effective-From ({eff_from})")
+
     cal_days = int(metadata["calendar_days"])
+    if cal_days < 0:
+        raise ValueError(f"Settlement-Calendar-Days must be non-negative, got {cal_days}")
     fee_bps = int(metadata["fee_bps"])
+    if fee_bps < 0:
+        raise ValueError(f"Processing-Fee-Bps must be non-negative, got {fee_bps}")
 
     return {
         "policy_id": policy_id,
@@ -210,7 +234,12 @@ def validate_bundle(bundle_path: Path) -> dict[str, Any]:
 
         names = set()
         for info in infolist:
+            # Reject symlinks: Unix file mode 0o120000
+            if (info.external_attr >> 16) & 0o170000 == 0o120000:
+                raise ValueError(f"Symlink archive member rejected: {info.filename}")
             safe_name = _validate_safe_zip_path(info.filename)
+            if safe_name in names:
+                raise ValueError(f"Duplicate archive member path rejected: {safe_name}")
             names.add(safe_name)
 
         if "manifest.json" not in names:
@@ -225,6 +254,8 @@ def validate_bundle(bundle_path: Path) -> dict[str, Any]:
             raise ValueError(f"Invalid manifest.json schema: {e}")
 
         # Check cohort and as_of
+        if manifest.cohort_start.tzinfo is None or manifest.cohort_end.tzinfo is None or manifest.as_of.tzinfo is None:
+            raise ValueError("cohort_start, cohort_end, and as_of must include timezone offsets")
         if manifest.as_of < manifest.cohort_end:
             raise ValueError(f"Cutoff as_of ({manifest.as_of}) must be >= cohort_end ({manifest.cohort_end})")
         if manifest.cohort_end <= manifest.cohort_start:
@@ -242,11 +273,23 @@ def validate_bundle(bundle_path: Path) -> dict[str, Any]:
         if missing_files:
             raise ValueError(f"Manifest declares files missing from ZIP: {missing_files}")
 
-        # Verify checksums of every file
+        # Require at least one policy PDF and at least one correspondence file
+        has_policy = any(f.kind == "policy" and f.path.endswith(".pdf") for f in manifest.files)
+        if not has_policy:
+            raise ValueError("Bundle must contain at least one policy PDF under docs/")
+        has_correspondence = any(f.kind == "correspondence" for f in manifest.files)
+        if not has_correspondence:
+            raise ValueError("Bundle must contain at least one correspondence file")
+
+        # Verify checksums and size limits of every file
         file_bytes_map: dict[str, bytes] = {}
         for entry in manifest.files:
             p = entry.path.strip("/")
             data = zf.read(p)
+            if len(data) > DOC_MAX_BYTES:
+                raise ValueError(
+                    f"File '{entry.path}' size ({len(data)} bytes) exceeds limit ({DOC_MAX_BYTES} bytes)"
+                )
             actual_sha = hashlib.sha256(data).hexdigest().lower()
             expected_sha = entry.sha256.lower()
             if actual_sha != expected_sha:
@@ -254,6 +297,17 @@ def validate_bundle(bundle_path: Path) -> dict[str, Any]:
                     f"Checksum mismatch for '{entry.path}': expected {expected_sha}, computed {actual_sha}"
                 )
             file_bytes_map[p] = data
+
+        # Deep validate policy PDFs and correspondence encoding
+        for entry in manifest.files:
+            p = entry.path.strip("/")
+            if entry.kind == "policy" and p.endswith(".pdf"):
+                _parse_policy_text(file_bytes_map[p], uuid.uuid4())
+            elif entry.kind == "correspondence":
+                try:
+                    file_bytes_map[p].decode("utf-8")
+                except UnicodeDecodeError as ue:
+                    raise ValueError(f"Correspondence file '{entry.path}' is not valid UTF-8: {ue}")
 
         fingerprint = compute_bundle_fingerprint(manifest)
 
@@ -624,6 +678,10 @@ def validate_bundle(bundle_path: Path) -> dict[str, Any]:
                     )
                 )
 
+        total_csv_records = len(orders_by_id) + len(refunds_by_id) + len(fees_by_id) + len(payouts_by_id) + len(links_by_id)
+        if total_csv_records > CSV_MAX_TOTAL_RECORDS:
+            raise ValueError(f"Total CSV records ({total_csv_records}) exceeds limit ({CSV_MAX_TOTAL_RECORDS})")
+
         return {
             "manifest": manifest,
             "fingerprint": fingerprint,
@@ -724,6 +782,12 @@ async def import_bundle(
             # Stage files
             source_records: list[dict[str, Any]] = []
             sources_by_rel_name: dict[str, uuid.UUID] = {}
+            # Group filenames by content SHA256 to record aliases
+            sha_to_rel_names: dict[str, list[str]] = {}
+            for entry in manifest.files:
+                p = entry.path.strip("/")
+                sha_to_rel_names.setdefault(entry.sha256.lower(), []).append(p)
+
             for entry in manifest.files:
                 p = entry.path.strip("/")
                 content = file_bytes_map[p]
@@ -754,6 +818,7 @@ async def import_bundle(
                                 pass
 
                 internal_path = (published_sources_dir / p).as_posix()
+                aliases = [other for other in sha_to_rel_names[entry.sha256.lower()] if other != p]
                 source_records.append({
                     "source_id": source_id,
                     "case_id": case_id,
@@ -763,7 +828,7 @@ async def import_bundle(
                     "kind": entry.kind,
                     "published_at": doc_pub_at,
                     "internal_path": internal_path,
-                    "aliases": json.dumps([]),
+                    "aliases": json.dumps(aliases),
                 })
 
             # Parse policies

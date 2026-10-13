@@ -6,9 +6,9 @@ Updated 2026-10-13. Current state: documentation-only planning pack. Application
 
 ## Current position and next action
 
-Current phase: **Phase 1 — Safe storage and real uploads**. Exact next task: **Phase 1 Gate G1 — Independent review-and-fix subagent verification**. Batch implementation authorization recorded.
+Current phase: **Phase 2 — Complete first investigation workflow**. Exact next task: **MT2.1 — Implement reconciliation and record inspection**. Batch implementation authorization recorded.
 
-Phase 0 completed and accepted via automated review-and-fix gate G0 (commit ec5b9c7, verdict PASS). Phase 1 in progress.
+Phase 1 completed and accepted via automated review-and-fix gate G1 (candidate 8286e98, verdict PASS). Starting Phase 2.
 
 ## Canonical task list
 
@@ -64,7 +64,7 @@ A checkbox means the deliverable and minimal verification passed and evidence wa
 | Gate | Required evidence | Verification | User approval |
 | --- | --- | --- | --- |
 | G0 | Reviewed scope, locked identities, measured feasibility, independent valid fixtures/gold | Passed (candidate ec5b9c7; independent reviewer PASS; 10/10 probes, exact demo totals, 12 dev + 18 test disjoint datasets validated) | Approved via user batch authorization (2026-10-13) |
-| G1 | Atomic actual import, duplicates, source locators, authenticated scoped API/read-only role | Pending | Not recorded |
+| G1 | Atomic actual import, duplicates, source locators, authenticated scoped API/read-only role | Passed (candidate 8286e98; independent reviewer PASS; atomic rollback verified, duplicate locators, PDF/CSV/text provenance, constant-time auth, reader write denied, 6/6 tests pass) | Approved via user batch authorization (2026-10-13) |
 | G2 | Live uploaded case → original question → exact totals/explanation → CSV/PDF/text citations | Pending | Not recorded |
 | G3 | Hybrid retrieval/read tools and fixed development baseline | Pending | Not recorded |
 | G4 | Bounded investigator, context, cancel/error/security/trace behavior, development review | Pending | Not recorded |
@@ -74,6 +74,8 @@ A checkbox means the deliverable and minimal verification passed and evidence wa
 Implementation-start authorization: **Recorded (explicit batch authorization for Phases 0 through 6 in order with per-phase review-and-fix gate; 2026-10-13)**. Planning/repository authorization does not authorize application phases. Record actual user approval scope/date at each gate; never treat silence, a passing test, or a commit as approval. A user's explicit batch authorization of named phases may be recorded, but must not be inferred.
 
 ## Verification and checkpoint ledger
+
+- **Phase 1 Gate G1 (2026-10-14)**: Independent review-and-fix subagent completed evaluation of candidate commit `8286e98e727670e309cb6cbb411fa722a466a93b` on `implementation/build`. Verified schema migrations, restricted roles (`moneytrail_writer`, `moneytrail_reader`), bundle validation, atomic rollback on mid-import failure, idempotent duplicate re-import, source provenance (`csv:r<n>`, `pdf:p<page>:l<start>-<end>`, `text:l<start>-<end>`), full-text and vector chunk indexing, authenticated REST APIs (`/healthz`, `/api/v1/cases/import`, `/api/v1/cases`, `/api/v1/cases/{case_id}`, `/sources/{source_id}`, `/segments`, `/content`), constant-time token auth, cross-case 404 boundaries, read-only transaction write denial, archive traversal rejection, symlink rejection, and payload size limits (6/6 tests passed). Subagent hardened locator bounds, symlink rejection, duplicate archive members, and payload limits; returned verdict PASS. Phase 1 accepted under user batch implementation authorization. Next action: MT2.1.
 
 - **MT1.4 (2026-10-14)**: Implemented `src/moneytrail/api.py` exposing FastAPI authenticated REST endpoints (`/healthz`, `/api/v1/cases/import`, `/api/v1/cases`, `/api/v1/cases/{case_id}`, `/api/v1/cases/{case_id}/sources/{source_id}`, `/segments`, `/content`), constant-time bearer token auth (`hmac.compare_digest`), global workload lock for serial local processing, safe error envelope with `request_id`, controlled media types and dispositions without HTML execution. Implemented `tests/test_security.py` verifying 401 unauthenticated denial, 404 cross-case boundary protection, PostgreSQL reader role write failure (`ReadOnlySqlTransaction`), archive traversal prevention, and inert handling of adversarial text injections. Executed `pytest tests/test_import.py tests/test_security.py -q` (5 passed). Next action: Phase 1 Gate G1.
 - **MT1.3 (2026-10-14)**: Implemented `src/moneytrail/retrieval.py` with text/PDF line extraction preserving line numbers, policy metadata boundary enforcement, ~180 token chunking with ~30 token overlap, sentence-transformers embedding generation (`all-MiniLM-L6-v2` revision `1110a243fdf4706b3f48f1d95db1a4f5529b4d41`), exact locator resolution (`csv:r<n>`, `pdf:p<page>:l<start>-<end>`, `text:l<start>-<end>`), and tsvector lexical search. Connected real indexer to `ingest.py`. Executed `uv run --env-file .env python -m moneytrail.ingest import fixtures/demo.zip` (ready, 5 orders, 3 refunds, 5 fees, 2 payouts, 4 links, 2 policies, 6 chunks) and `pytest tests/test_import.py -q` (3 passed). Next action: MT1.4 — Expose authenticated case/source APIs and security checks.

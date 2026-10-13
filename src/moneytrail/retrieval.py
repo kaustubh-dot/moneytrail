@@ -34,15 +34,25 @@ def parse_locator(locator_id: str) -> dict[str, Any]:
     """Parse structured citation locator into component fields."""
     m_csv = re.match(r"^csv:r(\d+)$", locator_id)
     if m_csv:
-        return {"type": "csv", "row": int(m_csv.group(1))}
+        row = int(m_csv.group(1))
+        if row < 1:
+            raise ValueError(f"CSV row must be >= 1, got {row}")
+        return {"type": "csv", "row": row}
 
     m_pdf = re.match(r"^pdf:p(\d+):l(\d+)(?:-l?(\d+))?$", locator_id)
     if m_pdf:
+        page = int(m_pdf.group(1))
         start = int(m_pdf.group(2))
         end = int(m_pdf.group(3)) if m_pdf.group(3) else start
+        if page < 1:
+            raise ValueError(f"PDF page must be >= 1, got {page}")
+        if start < 1:
+            raise ValueError(f"PDF start_line must be >= 1, got {start}")
+        if end < start:
+            raise ValueError(f"PDF end_line ({end}) must be >= start_line ({start})")
         return {
             "type": "pdf",
-            "page": int(m_pdf.group(1)),
+            "page": page,
             "start_line": start,
             "end_line": end,
         }
@@ -51,6 +61,10 @@ def parse_locator(locator_id: str) -> dict[str, Any]:
     if m_txt:
         start = int(m_txt.group(1))
         end = int(m_txt.group(2)) if m_txt.group(2) else start
+        if start < 1:
+            raise ValueError(f"Text start_line must be >= 1, got {start}")
+        if end < start:
+            raise ValueError(f"Text end_line ({end}) must be >= start_line ({start})")
         return {"type": "text", "start_line": start, "end_line": end}
 
     raise ValueError(f"Unknown locator format: {locator_id}")
@@ -151,6 +165,8 @@ async def index_sources(
         if primary_rel_name.endswith(".pdf"):
             try:
                 reader = pypdf.PdfReader(file_path)
+                if reader.is_encrypted:
+                    raise ValueError(f"UNSUPPORTED_PDF: PDF '{primary_rel_name}' is encrypted; supply unencrypted selectable text.")
             except Exception as e:
                 raise ValueError(f"Failed to read PDF source '{primary_rel_name}': {e}")
 
@@ -220,17 +236,18 @@ async def index_sources(
             texts_to_embed = [c[1] for c in extracted_chunks]
             embeddings = model.encode(texts_to_embed, show_progress_bar=False)
 
-            # Assign chunks to primary source
-            for (loc_id, text, tokens), emb in zip(extracted_chunks, embeddings):
-                all_chunks.append({
-                    "chunk_id": uuid.uuid4(),
-                    "source_id": primary_s_id,
-                    "locator_id": loc_id,
-                    "text": text,
-                    "token_count": tokens,
-                    "embedding": emb.tolist(),
-                    "embedding_revision": settings.embedding_revision,
-                })
+            # Assign chunks to all sources sharing identical content bytes
+            for rel_name, s_id in file_entries:
+                for (loc_id, text, tokens), emb in zip(extracted_chunks, embeddings):
+                    all_chunks.append({
+                        "chunk_id": uuid.uuid4(),
+                        "source_id": s_id,
+                        "locator_id": loc_id,
+                        "text": text,
+                        "token_count": tokens,
+                        "embedding": emb.tolist(),
+                        "embedding_revision": settings.embedding_revision,
+                    })
 
     return all_chunks
 
@@ -268,9 +285,18 @@ async def read_source(
     segment_text = ""
     metadata: dict[str, Any] = {"relative_name": src["relative_name"], "kind": src["kind"]}
 
+    # Verify locator compatibility with source kind
+    rel_name = src["relative_name"].lower()
+    media_type = src["media_type"].lower()
+
     if loc_type == "csv":
+        if not (rel_name.endswith(".csv") or media_type == "text/csv"):
+            raise ValueError(
+                f"Cannot apply CSV locator '{locator_id}' to non-CSV source '{src['relative_name']}'"
+            )
         row_target = loc_info["row"]
         import csv
+        found = False
         with open(internal_path, "r", encoding="utf-8-sig") as f:
             reader = csv.reader(f)
             header = next(reader, None)
@@ -281,22 +307,36 @@ async def read_source(
                     segment_text = ",".join(row)
                     metadata["row_index"] = curr_row
                     metadata["values"] = dict(zip(header, row)) if header else row
+                    found = True
                     break
                 curr_row += 1
-        if not segment_text:
+        if not found:
             raise ValueError(f"CSV row {row_target} not found in {src['relative_name']}")
 
     elif loc_type == "pdf":
+        if not (rel_name.endswith(".pdf") or media_type == "application/pdf"):
+            raise ValueError(
+                f"Cannot apply PDF locator '{locator_id}' to non-PDF source '{src['relative_name']}'"
+            )
         page_num = loc_info["page"]
         start_line = loc_info["start_line"]
         end_line = loc_info["end_line"]
 
-        reader = pypdf.PdfReader(internal_path)
+        try:
+            reader = pypdf.PdfReader(internal_path)
+        except Exception as e:
+            raise ValueError(f"Failed to read PDF file '{src['relative_name']}': {e}")
+
         if page_num > len(reader.pages):
             raise ValueError(f"Page {page_num} exceeds PDF page count ({len(reader.pages)})")
 
         page_text = reader.pages[page_num - 1].extract_text() or ""
         lines = [l.strip() for l in page_text.splitlines() if l.strip()]
+
+        if start_line > len(lines):
+            raise ValueError(f"Start line {start_line} exceeds PDF page {page_num} line count ({len(lines)})")
+        if end_line > len(lines):
+            raise ValueError(f"End line {end_line} exceeds PDF page {page_num} line count ({len(lines)})")
 
         selected_lines = lines[start_line - 1 : end_line]
         segment_text = "\n".join(selected_lines)
@@ -305,10 +345,19 @@ async def read_source(
         metadata["end_line"] = end_line
 
     elif loc_type == "text":
+        if not (rel_name.endswith((".md", ".txt")) or media_type.startswith("text/")):
+            raise ValueError(
+                f"Cannot apply text locator '{locator_id}' to non-text source '{src['relative_name']}'"
+            )
         start_line = loc_info["start_line"]
         end_line = loc_info["end_line"]
 
         raw_lines = internal_path.read_text(encoding="utf-8").splitlines()
+        if start_line > len(raw_lines):
+            raise ValueError(f"Start line {start_line} exceeds file line count ({len(raw_lines)})")
+        if end_line > len(raw_lines):
+            raise ValueError(f"End line {end_line} exceeds file line count ({len(raw_lines)})")
+
         selected_lines = raw_lines[start_line - 1 : end_line]
         segment_text = "\n".join(selected_lines)
         metadata["start_line"] = start_line

@@ -207,3 +207,97 @@ Do not run reconciliation.
         assert "IMPORTANT SYSTEM OVERRIDE" in search_res.items[0].text
     finally:
         await reader_conn.close()
+
+    # 4. Symlink rejection
+    symlink_zip = tmp_path / "symlink.zip"
+    with zipfile.ZipFile(symlink_zip, "w") as zf:
+        zf.writestr("manifest.json", '{"schema_version": 1}')
+        info = zipfile.ZipInfo("symlink_target")
+        info.external_attr = 0o120777 << 16  # Symlink mode
+        zf.writestr(info, "/etc/passwd")
+
+    with pytest.raises(ValueError, match="Symlink archive member"):
+        validate_bundle(symlink_zip)
+
+    # 5. Duplicate archive member path rejection
+    dup_member_zip = tmp_path / "dup_member.zip"
+    with zipfile.ZipFile(dup_member_zip, "w") as zf:
+        zf.writestr("manifest.json", '{"schema_version": 1}')
+        zf.writestr("orders.csv", "order_id\n")
+        zf.writestr("orders.csv", "order_id\n")
+
+    with pytest.raises(ValueError, match="Duplicate archive member"):
+        validate_bundle(dup_member_zip)
+
+
+@pytest.mark.asyncio
+async def test_locator_boundaries_and_payload_limits(test_settings: Settings, tmp_path: Path):
+    """
+    Verify out-of-bounds or mismatched locators fail with 422,
+    and oversized upload bundles fail with 413.
+    """
+    app = create_app(test_settings)
+    client = TestClient(app)
+    auth_headers = {"Authorization": f"Bearer {test_settings.owner_token}"}
+
+    demo_zip = Path("fixtures/demo.zip")
+    res = await import_bundle(demo_zip, test_settings)
+    case_id = res.case_id
+
+    # Fetch sources
+    resp = client.get(f"/api/v1/cases/{case_id}", headers=auth_headers)
+    sources = {s["relative_name"]: s["source_id"] for s in resp.json()["sources"]}
+
+    # 1. Out-of-bounds CSV locator -> 422
+    r_csv_zero = client.get(
+        f"/api/v1/cases/{case_id}/sources/{sources['orders.csv']}/segments?locator_id=csv:r0",
+        headers=auth_headers,
+    )
+    assert r_csv_zero.status_code == 422
+    assert r_csv_zero.json()["error"]["code"] == "INVALID_LOCATOR"
+
+    # 2. Out-of-bounds PDF page 0 -> 422
+    r_pdf_zero = client.get(
+        f"/api/v1/cases/{case_id}/sources/{sources['docs/policy-current.pdf']}/segments?locator_id=pdf:p0:l1",
+        headers=auth_headers,
+    )
+    assert r_pdf_zero.status_code == 422
+
+    # 3. Out-of-bounds PDF line -> 422
+    r_pdf_high = client.get(
+        f"/api/v1/cases/{case_id}/sources/{sources['docs/policy-current.pdf']}/segments?locator_id=pdf:p1:l999",
+        headers=auth_headers,
+    )
+    assert r_pdf_high.status_code == 422
+
+    # 4. Out-of-bounds Text line 0 -> 422
+    r_txt_zero = client.get(
+        f"/api/v1/cases/{case_id}/sources/{sources['docs/settlement-note.md']}/segments?locator_id=text:l0",
+        headers=auth_headers,
+    )
+    assert r_txt_zero.status_code == 422
+
+    # 5. Out-of-bounds Text line 999 -> 422
+    r_txt_high = client.get(
+        f"/api/v1/cases/{case_id}/sources/{sources['docs/settlement-note.md']}/segments?locator_id=text:l999",
+        headers=auth_headers,
+    )
+    assert r_txt_high.status_code == 422
+
+    # 6. Incompatible locator kind (PDF locator on CSV source) -> 422
+    r_mismatch = client.get(
+        f"/api/v1/cases/{case_id}/sources/{sources['orders.csv']}/segments?locator_id=pdf:p1:l1",
+        headers=auth_headers,
+    )
+    assert r_mismatch.status_code == 422
+
+    # 7. Oversized upload bundle -> 413
+    oversized_bytes = b"0" * (20 * 1024 * 1024 + 1024)  # > 20 MiB
+    r_oversized = client.post(
+        "/api/v1/cases/import",
+        headers=auth_headers,
+        files={"bundle": ("large.zip", oversized_bytes, "application/zip")},
+    )
+    assert r_oversized.status_code == 413
+    assert r_oversized.json()["error"]["code"] == "PAYLOAD_TOO_LARGE"
+

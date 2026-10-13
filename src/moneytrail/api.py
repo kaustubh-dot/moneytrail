@@ -1,11 +1,14 @@
 """FastAPI application for MoneyTrail: authenticated case and source management APIs."""
 
 import asyncio
+from contextlib import asynccontextmanager
 import hmac
 import json
 import os
+import shutil
 import tempfile
 import uuid
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +18,7 @@ import psycopg
 from psycopg import sql
 from psycopg.rows import dict_row
 
-from moneytrail.config import Settings
+from moneytrail.config import ZIP_MAX_COMPRESSED_BYTES, Settings
 from moneytrail.db import get_reader_connection, get_writer_connection
 from moneytrail.ingest import import_bundle
 from moneytrail.retrieval import read_source
@@ -61,14 +64,28 @@ def verify_owner_token(
 
 def create_app(custom_settings: Settings | None = None) -> FastAPI:
     """Create and configure FastAPI application."""
-    app = FastAPI(title="MoneyTrail API", version="1.0.0")
-
-    app.state.settings = custom_settings
 
     def resolve_settings() -> Settings:
         if app.state.settings is not None:
             return app.state.settings
         return Settings.from_env()
+
+    @asynccontextmanager
+    async def lifespan(app_instance: FastAPI):
+        """Clean up orphan staging directories on startup."""
+        try:
+            settings = resolve_settings()
+            staging_root = settings.data_dir / "staging"
+            if staging_root.exists():
+                for orphan in staging_root.iterdir():
+                    if orphan.is_dir():
+                        shutil.rmtree(orphan, ignore_errors=True)
+        except Exception:
+            pass
+        yield
+
+    app = FastAPI(title="MoneyTrail API", version="1.0.0", lifespan=lifespan)
+    app.state.settings = custom_settings
 
     # Safe error envelope exception handlers
     @app.exception_handler(HTTPException)
@@ -135,11 +152,21 @@ def create_app(custom_settings: Settings | None = None) -> FastAPI:
             )
 
         async with _WORKLOAD_LOCK:
+            content = await bundle.read()
+            if len(content) > ZIP_MAX_COMPRESSED_BYTES:
+                raise HTTPException(
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                    detail={
+                        "code": "PAYLOAD_TOO_LARGE",
+                        "message": f"Bundle size ({len(content)} bytes) exceeds limit ({ZIP_MAX_COMPRESSED_BYTES} bytes)",
+                        "details": {},
+                    },
+                )
+
             # Save uploaded bundle to temporary file
             with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
                 temp_path = Path(tmp.name)
                 try:
-                    content = await bundle.read()
                     temp_path.write_bytes(content)
 
                     # Import bundle using real indexer pipeline
@@ -151,9 +178,9 @@ def create_app(custom_settings: Settings | None = None) -> FastAPI:
                     )
                     return result.model_dump(mode="json")
 
-                except ValueError as ve:
+                except (ValueError, zipfile.BadZipFile) as ve:
                     raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                         detail={
                             "code": "INVALID_BUNDLE",
                             "message": str(ve),
@@ -319,7 +346,7 @@ def create_app(custom_settings: Settings | None = None) -> FastAPI:
                 )
             except (ValueError, FileNotFoundError) as ve:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail={"code": "INVALID_LOCATOR", "message": str(ve), "details": {}},
                 )
         finally:
@@ -354,7 +381,7 @@ def create_app(custom_settings: Settings | None = None) -> FastAPI:
                     )
 
             file_path = Path(src["internal_path"])
-            if not file_path.exists():
+            if not file_path.exists() or not file_path.resolve().is_relative_to(settings.data_dir.resolve()):
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail={"code": "NOT_FOUND", "message": "Source file not found on disk", "details": {}},
