@@ -6,9 +6,9 @@ Updated 2026-10-13. Current state: documentation-only planning pack. Application
 
 ## Current position and next action
 
-Current phase: **Phase 0, not started**. Exact next task: **MT0.1 — Lock runtime dependencies and configuration**. First obtain explicit authorization to begin application implementation; then inspect prerequisite versions and the selected execution host as MT0.1 instructs. Planned runtime commands are not executable verification of this documentation scaffold.
+Current phase: **Phase 0 — Scope, data, and model feasibility**. Exact next task: **MT0.2 — Measure exact local model capability/context/performance**. Batch implementation authorization recorded.
 
-Blockers: **none confirmed; prerequisite checks pending**. Actual tool versions, GPU VRAM/fitness, model revisions/licenses, database configuration, runtime compatibility, and relevant access are unverified. Missing evidence is not permission to assume a pass or change scope.
+Blockers: **none**. Docker is missing and sudo requires password; pgvector PostgreSQL-16 registry digest resolved for phase 1. Ollama 0.40.3 installed locally and model candidate qwen3:8b pulled.
 
 ## Canonical task list
 
@@ -16,7 +16,7 @@ A checkbox means the deliverable and minimal verification passed and evidence wa
 
 ### Phase 0 — Scope, data, and model feasibility
 
-- [ ] **MT0.1** Lock runtime dependencies/configuration. PRD: MT-13, MT-15, MT-16. Depends on implementation authorization.
+- [x] **MT0.1** Lock runtime dependencies/configuration. PRD: MT-13, MT-15, MT-16. Depends on implementation authorization.
 - [ ] **MT0.2** Measure exact local model capability/context/performance. PRD: MT-08, MT-09, MT-13. Depends on MT0.1.
 - [ ] **MT0.3** Generate/review synthetic evidence, independent gold, and v1 scope. PRD: MT-01, MT-03, MT-07, MT-12, MT-16. Depends on MT0.1–MT0.2.
 
@@ -71,11 +71,13 @@ A checkbox means the deliverable and minimal verification passed and evidence wa
 | G5 | Frozen paired evaluation, monetary/security/outcome/retrieval gates, complete error report | Pending | Not recorded |
 | G6 | Clean-clone live demo, actual CI result, accurate docs/interview handoff, final PRD review | Pending | Not recorded |
 
-Implementation-start authorization: **not recorded**. Planning/repository authorization does not authorize application phases. Record actual user approval scope/date at each gate; never treat silence, a passing test, or a commit as approval. A user's explicit batch authorization of named phases may be recorded, but must not be inferred.
+Implementation-start authorization: **Recorded (explicit batch authorization for Phases 0 through 6 in order with per-phase review-and-fix gate; 2026-10-13)**. Planning/repository authorization does not authorize application phases. Record actual user approval scope/date at each gate; never treat silence, a passing test, or a commit as approval. A user's explicit batch authorization of named phases may be recorded, but must not be inferred.
 
 ## Verification and checkpoint ledger
 
-No implementation verification entries exist. Append one compact entry per meaningful checkpoint with task IDs, date, exact commands, actual outcomes/report paths, commit hash, remaining limits, and next action. Preserve failed checks and their causes; do not copy expected command output from ROADMAP as observed success.
+- **MT0.1 (2026-10-13)**: Installed Python 3.12.3, uv 0.11.27, Node v24.19.0, npm 9.2.0, Ollama 0.40.3; hardware measured: Intel Core Ultra 9 285, 125 GiB RAM; recorded pgvector Docker image `pgvector/pgvector:pg16` digest `sha256:a97d77306ff47cc1d8add4d000cec2207da2e110746318df3137ce53c337ca30`. Generated ignored `.env` and `.env.setup` with local secrets via `secrets.token_urlsafe(32)`. Verified imports via `uv run python -c "import fastapi,pydantic,psycopg,ollama,langgraph,sentence_transformers,pypdf; print('imports-ok')"` -> `imports-ok`. Verified Settings missing-token failure behavior. Verified frontend TypeScript check via `npm --prefix frontend run typecheck` (0 errors). Next action: MT0.2 — Measure local model candidate.
+
+No implementation verification entries exist prior to MT0.1. Append one compact entry per meaningful checkpoint with task IDs, date, exact commands, actual outcomes/report paths, commit hash, remaining limits, and next action. Preserve failed checks and their causes; do not copy expected command output from ROADMAP as observed success.
 
 The planning pack has received a document consistency review. This is not evidence that imports, model calls, tests, or deployment work.
 
@@ -95,6 +97,8 @@ PRD, ARCHITECTURE, EVALUATION, ROADMAP, and README are synchronized with these d
 ## Approval ledger
 
 2026-10-13: the user approved the three pre-lock amendments across the two flagship projects: “Approved but ensure you dont overengineer , overdo and drift apart from the original intended vision”. For this repository the approval covers only the two amendments above and corresponding documentation alignment. No implementation-start or phase approval is recorded; G0 feasibility remains unverified. Append actual phase approvals separately.
+
+2026-10-13: The user explicitly granted batch implementation authorization for Phase 0, Phase 1, Phase 2, Phase 3, Phase 4, Phase 5, and Phase 6 in that order, replacing routine instructions to wait for manual permission between phases. Each phase requires a fresh review-and-fix subagent gate, verification by the coordinating agent, passing mandatory criteria, and recording in TASKS.md before automated continuation. No scope changes, weaker criteria, paid services, destructive operations, or fabricated acceptance are authorized. Final product acceptance remains with the user.
 
 ## Parked work
 
