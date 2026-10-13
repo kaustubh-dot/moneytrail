@@ -1,0 +1,2651 @@
+{
+  "freeze_file": "evals/reports/freeze.json",
+  "freeze_sha256": "97082a21d47214156e8f11cf452e11b1148a90a53d8be6ed7c0a4261cb23b73a",
+  "freeze_commit": "554fc4edc4f1e8a300dd27e7d521df695a69a714",
+  "split": "test",
+  "created_at": "2026-10-14T04:30:26.177611",
+  "warmup_s": 8.471,
+  "hardware": {
+    "platform": "Linux-6.17.0-1032-oem-x86_64-with-glibc2.39",
+    "python_version": "3.12.3",
+    "cpu": "Intel(R) Core(TM) Ultra 9 285",
+    "ram": "131313820 kB",
+    "ollama_version": "ollama version is 0.40.3"
+  },
+  "pinned_revisions": {
+    "model": "qwen3:8b",
+    "model_digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+    "tokenizer": "Qwen/Qwen2.5-7B-Instruct@b968826d9c46dd6066d109eabc6255188de91218",
+    "embedding": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+    "reranker": "cross-encoder/ms-marco-MiniLM-L6-v2@233902d25c440f23af6f7d6e94d2946bac0bee0a"
+  },
+  "config": {
+    "context_window": 8192,
+    "max_tool_calls": 6,
+    "max_model_turns": 4,
+    "model_timeout_seconds": 60,
+    "run_timeout_seconds": 240,
+    "currency": "INR"
+  },
+  "summary": {
+    "total_cases": 18,
+    "fixed_passed": 18,
+    "agent_passed": 17,
+    "agent_wins": 0,
+    "fixed_wins": 1,
+    "ties": 17,
+    "by_family": {
+      "A": {
+        "total": 6,
+        "fixed_passed": 6,
+        "agent_passed": 6
+      },
+      "B": {
+        "total": 6,
+        "fixed_passed": 6,
+        "agent_passed": 6
+      },
+      "C": {
+        "total": 6,
+        "fixed_passed": 6,
+        "agent_passed": 5
+      }
+    }
+  },
+  "runs": {
+    "test-a1": {
+      "eval_id": "test-a1",
+      "family": "A",
+      "question": "Why did order O-TA1-1 settle on September 5th rather than September 4th?",
+      "expected_outcome": "explained",
+      "rubric_notes": "Hand calc: POL-TA1 specifies T+3 calendar days; Sept 2 + 3 days = Sept 5.",
+      "mode_order": [
+        "fixed",
+        "agent"
+      ],
+      "fixed": {
+        "outcome": "explained",
+        "elapsed_s": 6.434,
+        "claims": [
+          "Order O-TA1-1 settled on September 5th because it was processed under the T+3 settlement terms specified in Policy POL-TA1, which dictates that settlements occur three business days after the transaction date. The expected settlement date for this order is 2026-09-05.",
+          "The gross amount of order O-TA1-1 is INR 70,000, and the assessed fees are INR 1,400, resulting in a net amount of INR 68,600."
+        ],
+        "claims_templates": [
+          "Order O-TA1-1 settled on September 5th because it was processed under the T+3 settlement terms specified in Policy POL-TA1, which dictates that settlements occur three business days after the transaction date. The expected settlement date for this order is {{fact:fact_O-TA1-1_expected_settlement_date}}.",
+          "The gross amount of order O-TA1-1 is {{fact:fact_O-TA1-1_gross}}, and the assessed fees are {{fact:fact_O-TA1-1_fees}}, resulting in a net amount of {{fact:fact_O-TA1-1_net}}."
+        ],
+        "selected_facts": [
+          "fact_POL-TA1_settlement_days",
+          "fact_O-TA1-1_expected_settlement_date",
+          "fact_O-TA1-1_gross",
+          "fact_O-TA1-1_fees",
+          "fact_O-TA1-1_net"
+        ],
+        "citations": [
+          "pdf:p1:l1",
+          "pdf:p1:l2",
+          "pdf:p1:l3",
+          "pdf:p1:l4",
+          "pdf:p1:l5",
+          "pdf:p1:l6",
+          "csv:r1",
+          "csv:r1",
+          "csv:r1"
+        ],
+        "unresolved": [],
+        "budget_summary": {},
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: POL-TA1 specifies T+3 calendar days; Sept 2 + 3 days = Sept 5.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: POL-TA1 specifies T+3 calendar days; Sept 2 + 3 days = Sept 5.)"
+        }
+      },
+      "agent": {
+        "outcome": "explained",
+        "elapsed_s": 7.471,
+        "claims": [
+          "Order O-TA1-1 settled on September 5th because the expected settlement date, as per policy POL-TA1, was calculated based on a 3-day settlement period starting from the order's capture date of September 2nd. The expected settlement date is therefore 2026-09-05.",
+          "The gross amount of order O-TA1-1 was INR 70,000, and the assessed fees were INR 1,400 based on a fee rate of 200 bps as per policy POL-TA1."
+        ],
+        "claims_templates": [
+          "Order O-TA1-1 settled on September 5th because the expected settlement date, as per policy POL-TA1, was calculated based on a 3-day settlement period starting from the order's capture date of September 2nd. The expected settlement date is therefore {{fact:fact_O-TA1-1_expected_settlement_date}}.",
+          "The gross amount of order O-TA1-1 was {{fact:fact_O-TA1-1_gross}}, and the assessed fees were {{fact:fact_O-TA1-1_fees}} based on a fee rate of 200 bps as per policy POL-TA1."
+        ],
+        "selected_facts": [
+          "fact_O-TA1-1_expected_settlement_date",
+          "fact_O-TA1-1_gross",
+          "fact_O-TA1-1_fees",
+          "fact_pol-ta1_fee_rate"
+        ],
+        "citations": [
+          "pdf:p1:l1",
+          "pdf:p1:l2",
+          "pdf:p1:l3",
+          "pdf:p1:l4",
+          "pdf:p1:l5",
+          "pdf:p1:l6",
+          "csv:r1",
+          "csv:r1"
+        ],
+        "unresolved": [],
+        "budget_summary": {
+          "tool_calls_used": 3,
+          "max_tool_calls": 6,
+          "model_turns_used": 2,
+          "max_model_turns": 4
+        },
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: POL-TA1 specifies T+3 calendar days; Sept 2 + 3 days = Sept 5.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: POL-TA1 specifies T+3 calendar days; Sept 2 + 3 days = Sept 5.)"
+        }
+      },
+      "comparison": {
+        "winner": "tie"
+      }
+    },
+    "test-a2": {
+      "eval_id": "test-a2",
+      "family": "A",
+      "question": "What is the expected settlement date and net amount for order O-TA2-1?",
+      "expected_outcome": "explained",
+      "rubric_notes": "Hand calc: 9000000 - 225000 = 8775000 pending paise. Expected date = Oct 1.",
+      "mode_order": [
+        "agent",
+        "fixed"
+      ],
+      "agent": {
+        "outcome": "explained",
+        "elapsed_s": 8.671,
+        "claims": [
+          "The expected settlement date for order O-TA2-1 is 2026-10-01.",
+          "The net amount for order O-TA2-1 is calculated as the gross amount of INR 90,000 minus the assessed fees of INR 2,250, resulting in a net amount of INR 87,750."
+        ],
+        "claims_templates": [
+          "The expected settlement date for order O-TA2-1 is {{fact:fact_O-TA2-1_expected_settlement_date}}.",
+          "The net amount for order O-TA2-1 is calculated as the gross amount of {{fact:fact_O-TA2-1_gross}} minus the assessed fees of {{fact:fact_O-TA2-1_fees}}, resulting in a net amount of {{fact:fact_O-TA2-1_net}}."
+        ],
+        "selected_facts": [
+          "fact_O-TA2-1_expected_settlement_date",
+          "fact_O-TA2-1_gross",
+          "fact_O-TA2-1_fees",
+          "fact_O-TA2-1_net"
+        ],
+        "citations": [
+          "pdf:p1:l1",
+          "pdf:p1:l2",
+          "pdf:p1:l3",
+          "pdf:p1:l4",
+          "pdf:p1:l5",
+          "pdf:p1:l6",
+          "csv:r1",
+          "csv:r1"
+        ],
+        "unresolved": [],
+        "budget_summary": {
+          "tool_calls_used": 5,
+          "max_tool_calls": 6,
+          "model_turns_used": 4,
+          "max_model_turns": 4
+        },
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 9000000 - 225000 = 8775000 pending paise. Expected date = Oct 1.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 9000000 - 225000 = 8775000 pending paise. Expected date = Oct 1.)"
+        }
+      },
+      "fixed": {
+        "outcome": "explained",
+        "elapsed_s": 5.925,
+        "claims": [
+          "The expected settlement date for order INR 90,000 is 2026-10-01.",
+          "The net amount for order INR 90,000 is calculated as the gross amount of INR 90,000 minus the assessed fees of INR 2,250, resulting in a net amount of INR 87,750."
+        ],
+        "claims_templates": [
+          "The expected settlement date for order {{fact:fact_O-TA2-1_gross}} is {{fact:fact_O-TA2-1_expected_settlement_date}}.",
+          "The net amount for order {{fact:fact_O-TA2-1_gross}} is calculated as the gross amount of {{fact:fact_O-TA2-1_gross}} minus the assessed fees of {{fact:fact_O-TA2-1_fees}}, resulting in a net amount of {{fact:fact_O-TA2-1_net}}."
+        ],
+        "selected_facts": [
+          "fact_O-TA2-1_gross",
+          "fact_O-TA2-1_expected_settlement_date",
+          "fact_O-TA2-1_fees",
+          "fact_O-TA2-1_net"
+        ],
+        "citations": [
+          "csv:r1",
+          "pdf:p1:l1",
+          "pdf:p1:l2",
+          "pdf:p1:l3",
+          "pdf:p1:l4",
+          "pdf:p1:l5",
+          "pdf:p1:l6",
+          "csv:r1"
+        ],
+        "unresolved": [],
+        "budget_summary": {},
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 9000000 - 225000 = 8775000 pending paise. Expected date = Oct 1.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 9000000 - 225000 = 8775000 pending paise. Expected date = Oct 1.)"
+        }
+      },
+      "comparison": {
+        "winner": "tie"
+      }
+    },
+    "test-a3": {
+      "eval_id": "test-a3",
+      "family": "A",
+      "question": "What fee percentage was deducted from order O-TA3-1?",
+      "expected_outcome": "explained",
+      "rubric_notes": "Hand calc: 90000 / 5000000 = 1.8% (180 bps).",
+      "mode_order": [
+        "fixed",
+        "agent"
+      ],
+      "fixed": {
+        "outcome": "explained",
+        "elapsed_s": 4.407,
+        "claims": [
+          "The fee percentage deducted from order O-TA3-1 was 180 bps based on the applicable policy POL-TA3. This is evidenced by a fee amount of INR 900 and a gross amount of INR 50,000, resulting in a fee rate of 180 bps."
+        ],
+        "claims_templates": [
+          "The fee percentage deducted from order O-TA3-1 was {{fact:fact_pol-ta3_fee_rate}} based on the applicable policy POL-TA3. This is evidenced by a fee amount of {{fact:fact_O-TA3-1_fees}} and a gross amount of {{fact:fact_O-TA3-1_gross}}, resulting in a fee rate of 180 bps."
+        ],
+        "selected_facts": [
+          "fact_pol-ta3_fee_rate",
+          "fact_O-TA3-1_fees",
+          "fact_O-TA3-1_gross"
+        ],
+        "citations": [
+          "csv:r1",
+          "csv:r1",
+          "pdf:p1:l1",
+          "pdf:p1:l2",
+          "pdf:p1:l3",
+          "pdf:p1:l4",
+          "pdf:p1:l5",
+          "pdf:p1:l6"
+        ],
+        "unresolved": [],
+        "budget_summary": {},
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 90000 / 5000000 = 1.8% (180 bps).)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 90000 / 5000000 = 1.8% (180 bps).)"
+        }
+      },
+      "agent": {
+        "outcome": "explained",
+        "elapsed_s": 6.074,
+        "claims": [
+          "The fee percentage deducted from order O-TA3-1 was 180 bps (180 bps bps), which resulted in a fee amount of INR 900 based on the gross amount of INR 50,000."
+        ],
+        "claims_templates": [
+          "The fee percentage deducted from order O-TA3-1 was {{fact:fact_POL-TA3_fee_rate}} ({{fact:fact_POL-TA3_fee_bps}} bps), which resulted in a fee amount of {{fact:fact_O-TA3-1_fees}} based on the gross amount of {{fact:fact_O-TA3-1_gross}}."
+        ],
+        "selected_facts": [
+          "fact_POL-TA3_fee_rate",
+          "fact_POL-TA3_fee_bps",
+          "fact_O-TA3-1_fees",
+          "fact_O-TA3-1_gross"
+        ],
+        "citations": [
+          "pdf:p1:l1",
+          "pdf:p1:l2",
+          "pdf:p1:l3",
+          "pdf:p1:l4",
+          "pdf:p1:l5",
+          "pdf:p1:l6",
+          "csv:r1",
+          "csv:r1"
+        ],
+        "unresolved": [],
+        "budget_summary": {
+          "tool_calls_used": 3,
+          "max_tool_calls": 6,
+          "model_turns_used": 2,
+          "max_model_turns": 4
+        },
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 90000 / 5000000 = 1.8% (180 bps).)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 90000 / 5000000 = 1.8% (180 bps).)"
+        }
+      },
+      "comparison": {
+        "winner": "tie"
+      }
+    },
+    "test-a4": {
+      "eval_id": "test-a4",
+      "family": "A",
+      "question": "Verify the fee deduction for order O-TA4-1 against policy.",
+      "expected_outcome": "explained",
+      "rubric_notes": "Hand calc: 320000 / 10000000 = 3.2% (320 bps). Matches policy exactly.",
+      "mode_order": [
+        "agent",
+        "fixed"
+      ],
+      "agent": {
+        "outcome": "explained",
+        "elapsed_s": 9.764,
+        "claims": [
+          "The fee deduction for order O-TA4-1 is INR 3,200 paise, which is calculated as a fee rate of 320 bps applied to the gross amount of INR 100,000 paise.",
+          "The expected net amount for order O-TA4-1 is INR 96,800 paise, which matches the gross amount of INR 100,000 paise minus the assessed fees of INR 3,200 paise."
+        ],
+        "claims_templates": [
+          "The fee deduction for order O-TA4-1 is {{fact:fact_O-TA4-1_fees}} paise, which is calculated as a fee rate of {{fact:fact_POL-TA4_fee_rate}} applied to the gross amount of {{fact:fact_O-TA4-1_gross}} paise.",
+          "The expected net amount for order O-TA4-1 is {{fact:fact_O-TA4-1_net}} paise, which matches the gross amount of {{fact:fact_O-TA4-1_gross}} paise minus the assessed fees of {{fact:fact_O-TA4-1_fees}} paise."
+        ],
+        "selected_facts": [
+          "fact_O-TA4-1_fees",
+          "fact_POL-TA4_fee_rate",
+          "fact_O-TA4-1_gross",
+          "fact_O-TA4-1_net"
+        ],
+        "citations": [
+          "csv:r1",
+          "csv:r1",
+          "pdf:p1:l1",
+          "pdf:p1:l2",
+          "pdf:p1:l3",
+          "pdf:p1:l4",
+          "pdf:p1:l5",
+          "pdf:p1:l6",
+          "csv:r1"
+        ],
+        "unresolved": [],
+        "budget_summary": {
+          "tool_calls_used": 5,
+          "max_tool_calls": 6,
+          "model_turns_used": 4,
+          "max_model_turns": 4
+        },
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 320000 / 10000000 = 3.2% (320 bps). Matches policy exactly.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 320000 / 10000000 = 3.2% (320 bps). Matches policy exactly.)"
+        }
+      },
+      "fixed": {
+        "outcome": "explained",
+        "elapsed_s": 6.509,
+        "claims": [
+          "The fee deduction for order O-TA4-1 is INR 3,200 paise, which is calculated as a fee rate of 320 bps applied to the gross amount of INR 100,000 paise.",
+          "The expected net amount for order O-TA4-1 is INR 96,800 paise, which matches the gross amount of INR 100,000 paise minus the assessed fees of INR 3,200 paise."
+        ],
+        "claims_templates": [
+          "The fee deduction for order O-TA4-1 is {{fact:fact_O-TA4-1_fees}} paise, which is calculated as a fee rate of {{fact:fact_POL-TA4_fee_rate}} applied to the gross amount of {{fact:fact_O-TA4-1_gross}} paise.",
+          "The expected net amount for order O-TA4-1 is {{fact:fact_O-TA4-1_net}} paise, which matches the gross amount of {{fact:fact_O-TA4-1_gross}} paise minus the assessed fees of {{fact:fact_O-TA4-1_fees}} paise."
+        ],
+        "selected_facts": [
+          "fact_O-TA4-1_fees",
+          "fact_POL-TA4_fee_rate",
+          "fact_O-TA4-1_gross",
+          "fact_O-TA4-1_net"
+        ],
+        "citations": [
+          "csv:r1",
+          "csv:r1",
+          "pdf:p1:l1",
+          "pdf:p1:l2",
+          "pdf:p1:l3",
+          "pdf:p1:l4",
+          "pdf:p1:l5",
+          "pdf:p1:l6",
+          "csv:r1"
+        ],
+        "unresolved": [],
+        "budget_summary": {},
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 320000 / 10000000 = 3.2% (320 bps). Matches policy exactly.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 320000 / 10000000 = 3.2% (320 bps). Matches policy exactly.)"
+        }
+      },
+      "comparison": {
+        "winner": "tie"
+      }
+    },
+    "test-a5": {
+      "eval_id": "test-a5",
+      "family": "A",
+      "question": "Which policy governed order O-TA5-1 captured at 9:00 AM on September 15th?",
+      "expected_outcome": "explained",
+      "rubric_notes": "Hand calc: 160000 / 8000000 = 200 bps -> POL-EARLY applied.",
+      "mode_order": [
+        "fixed",
+        "agent"
+      ],
+      "fixed": {
+        "outcome": "explained",
+        "elapsed_s": 6.83,
+        "claims": [
+          "Order O-TA5-1, captured on September 15th, was governed by policy POL-EARLY because its expected settlement date of 2026-09-17 falls within the effective period of POL-EARLY, which applies to orders captured between 2026-09-01T00:00:00+05:30 and 2026-10-01T00:00:00+05:30.",
+          "The gross amount of order O-TA5-1 is INR 80,000, and the assessed fees were INR 1,600 based on the fee rate of 200 bps."
+        ],
+        "claims_templates": [
+          "Order O-TA5-1, captured on September 15th, was governed by policy POL-EARLY because its expected settlement date of {{fact:fact_O-TA5-1_expected_settlement_date}} falls within the effective period of POL-EARLY, which applies to orders captured between {{fact:fact_cohort_start}} and {{fact:fact_cohort_end}}.",
+          "The gross amount of order O-TA5-1 is {{fact:fact_O-TA5-1_gross}}, and the assessed fees were {{fact:fact_O-TA5-1_fees}} based on the fee rate of {{fact:fact_POL-EARLY_fee_rate}}."
+        ],
+        "selected_facts": [
+          "fact_O-TA5-1_expected_settlement_date",
+          "fact_cohort_start",
+          "fact_cohort_end",
+          "fact_O-TA5-1_gross",
+          "fact_O-TA5-1_fees",
+          "fact_POL-EARLY_fee_rate"
+        ],
+        "citations": [
+          "pdf:p1:l1",
+          "pdf:p1:l2",
+          "pdf:p1:l3",
+          "pdf:p1:l4",
+          "pdf:p1:l5",
+          "pdf:p1:l6",
+          "text:l1-30",
+          "csv:r1",
+          "csv:r1"
+        ],
+        "unresolved": [],
+        "budget_summary": {},
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 160000 / 8000000 = 200 bps -> POL-EARLY applied.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 160000 / 8000000 = 200 bps -> POL-EARLY applied.)"
+        }
+      },
+      "agent": {
+        "outcome": "explained",
+        "elapsed_s": 7.98,
+        "claims": [
+          "The policy governing order O-TA5-1, captured on September 15th, is POL-EARLY. This policy was active from 2026-09-01 to 2026-09-15, and the order's capture date falls within this period.",
+          "The gross amount of order O-TA5-1 is INR 80,000, and the assessed fees are INR 1,600 based on the POL-EARLY policy's fee rate of 200 bps."
+        ],
+        "claims_templates": [
+          "The policy governing order O-TA5-1, captured on September 15th, is POL-EARLY. This policy was active from 2026-09-01 to 2026-09-15, and the order's capture date falls within this period.",
+          "The gross amount of order O-TA5-1 is {{fact:fact_O-TA5-1_gross}}, and the assessed fees are {{fact:fact_O-TA5-1_fees}} based on the POL-EARLY policy's fee rate of 200 bps."
+        ],
+        "selected_facts": [
+          "fact_O-TA5-1_expected_settlement_date",
+          "fact_POL-EARLY_settlement_days",
+          "fact_POL-EARLY_fee_rate",
+          "fact_O-TA5-1_gross",
+          "fact_O-TA5-1_fees"
+        ],
+        "citations": [
+          "pdf:p1:l1",
+          "pdf:p1:l2",
+          "pdf:p1:l3",
+          "pdf:p1:l4",
+          "pdf:p1:l5",
+          "pdf:p1:l6",
+          "csv:r1",
+          "csv:r1"
+        ],
+        "unresolved": [],
+        "budget_summary": {
+          "tool_calls_used": 3,
+          "max_tool_calls": 6,
+          "model_turns_used": 2,
+          "max_model_turns": 4
+        },
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 160000 / 8000000 = 200 bps -> POL-EARLY applied.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 160000 / 8000000 = 200 bps -> POL-EARLY applied.)"
+        }
+      },
+      "comparison": {
+        "winner": "tie"
+      }
+    },
+    "test-a6": {
+      "eval_id": "test-a6",
+      "family": "A",
+      "question": "Is there any pending balance in case test-a6?",
+      "expected_outcome": "explained",
+      "rubric_notes": "Hand calc: 12000000 - 300000 = 11700000 received. Pending = 0. Diff = 0.",
+      "mode_order": [
+        "agent",
+        "fixed"
+      ],
+      "agent": {
+        "outcome": "explained",
+        "elapsed_s": 5.734,
+        "claims": [
+          "The gross sales for case test-a6 are INR 120,000, with no refunds recorded. The assessed fees amount to INR 3,000, resulting in an expected net of INR 117,000.",
+          "The received payout allocations for case test-a6 are INR 117,000, and there are no documented pending settlements. This results in an unexplained discrepancy of INR 0.",
+          "The reconciliation process confirms that the financial records for case test-a6 are balanced, with no discrepancies detected. The final net amount of INR 117,000 has been fully received and allocated."
+        ],
+        "claims_templates": [
+          "The gross sales for case test-a6 are {{fact:fact_gross}}, with no refunds recorded. The assessed fees amount to {{fact:fact_fees}}, resulting in an expected net of {{fact:fact_net}}.",
+          "The received payout allocations for case test-a6 are {{fact:fact_received}}, and there are no documented pending settlements. This results in an unexplained discrepancy of {{fact:fact_difference}}.",
+          "The reconciliation process confirms that the financial records for case test-a6 are balanced, with no discrepancies detected. The final net amount of {{fact:fact_net}} has been fully received and allocated."
+        ],
+        "selected_facts": [
+          "fact_gross",
+          "fact_refunds",
+          "fact_fees",
+          "fact_net",
+          "fact_received",
+          "fact_pending",
+          "fact_difference"
+        ],
+        "citations": [
+          "csv:r1",
+          "csv:r1",
+          "csv:r1",
+          "csv:r1"
+        ],
+        "unresolved": [],
+        "budget_summary": {
+          "tool_calls_used": 1,
+          "max_tool_calls": 6,
+          "model_turns_used": 1,
+          "max_model_turns": 4
+        },
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 12000000 - 300000 = 11700000 received. Pending = 0. Diff = 0.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 12000000 - 300000 = 11700000 received. Pending = 0. Diff = 0.)"
+        }
+      },
+      "fixed": {
+        "outcome": "explained",
+        "elapsed_s": 3.504,
+        "claims": [
+          "The pending balance for case test-a6 is zero, as the reconciliation shows no unexplained discrepancy and all settlements are accounted for.",
+          "The expected net amount of {fact:fact_net} has been fully received through payout allocations, indicating that there is no pending balance."
+        ],
+        "claims_templates": [
+          "The pending balance for case test-a6 is zero, as the reconciliation shows no unexplained discrepancy and all settlements are accounted for.",
+          "The expected net amount of {fact:fact_net} has been fully received through payout allocations, indicating that there is no pending balance."
+        ],
+        "selected_facts": [
+          "fact_pending",
+          "fact_difference",
+          "fact_net",
+          "fact_received"
+        ],
+        "citations": [
+          "csv:r1",
+          "csv:r1",
+          "csv:r1",
+          "csv:r1"
+        ],
+        "unresolved": [],
+        "budget_summary": {},
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 12000000 - 300000 = 11700000 received. Pending = 0. Diff = 0.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 12000000 - 300000 = 11700000 received. Pending = 0. Diff = 0.)"
+        }
+      },
+      "comparison": {
+        "winner": "tie"
+      }
+    },
+    "test-b1": {
+      "eval_id": "test-b1",
+      "family": "B",
+      "question": "Was refund R-TB1-1 processed before the September cutoff?",
+      "expected_outcome": "explained",
+      "rubric_notes": "Hand calc: processed Sept 29 < Oct 1 cutoff. Deducted in full.",
+      "mode_order": [
+        "fixed",
+        "agent"
+      ],
+      "fixed": {
+        "outcome": "explained",
+        "elapsed_s": 7.649,
+        "claims": [
+          "Refund R-TB1-1 was processed before the September cutoff as evidenced by INR 5,000.",
+          "The cutoff date for the September cohort was 2026-10-01T00:00:00+05:30, and the refund R-TB1-1 was processed before this date."
+        ],
+        "claims_templates": [
+          "Refund R-TB1-1 was processed before the September cutoff as evidenced by {{fact:fact_refunds}}.",
+          "The cutoff date for the September cohort was {{fact:fact_cohort_end}}, and the refund R-TB1-1 was processed before this date."
+        ],
+        "selected_facts": [
+          "fact_refunds",
+          "fact_cohort_end"
+        ],
+        "citations": [
+          "csv:r1",
+          "text:l1-30"
+        ],
+        "unresolved": [],
+        "budget_summary": {},
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: processed Sept 29 < Oct 1 cutoff. Deducted in full.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: processed Sept 29 < Oct 1 cutoff. Deducted in full.)"
+        }
+      },
+      "agent": {
+        "outcome": "explained",
+        "elapsed_s": 3.454,
+        "claims": [
+          "Refund R-TB1-1 was processed before the September cutoff. The refund completion date is within the cohort period of 2026-09-01T00:00:00+05:30 to 2026-10-01T00:00:00+05:30, which includes the cutoff date of 2026-10-01T00:00:00+05:30."
+        ],
+        "claims_templates": [
+          "Refund R-TB1-1 was processed before the September cutoff. The refund completion date is within the cohort period of {{fact:fact_cohort_start}} to {{fact:fact_cohort_end}}, which includes the cutoff date of {{fact:fact_as_of}}."
+        ],
+        "selected_facts": [
+          "fact_refunds",
+          "fact_cohort_start",
+          "fact_cohort_end",
+          "fact_as_of"
+        ],
+        "citations": [
+          "text:l1-30",
+          "csv:r1"
+        ],
+        "unresolved": [],
+        "budget_summary": {
+          "tool_calls_used": 1,
+          "max_tool_calls": 6,
+          "model_turns_used": 1,
+          "max_model_turns": 4
+        },
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: processed Sept 29 < Oct 1 cutoff. Deducted in full.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: processed Sept 29 < Oct 1 cutoff. Deducted in full.)"
+        }
+      },
+      "comparison": {
+        "winner": "tie"
+      }
+    },
+    "test-b2": {
+      "eval_id": "test-b2",
+      "family": "B",
+      "question": "Why is refund R-TB2-1 excluded from the September reconciliation?",
+      "expected_outcome": "explained",
+      "rubric_notes": "Hand calc: processed 2026-10-02 >= 2026-10-01 as_of. Excluded with reason.",
+      "mode_order": [
+        "agent",
+        "fixed"
+      ],
+      "agent": {
+        "outcome": "explained",
+        "elapsed_s": 5.883,
+        "claims": [
+          "The refund R-TB2-1 is excluded from the September reconciliation because it was processed at or after the cutoff date of {fact:fact_as_of}, which means it falls outside the cohort period defined by {fact:fact_cohort_start} to {fact:fact_cohort_end}.",
+          "The reconciliation shows that the refund R-TB2-1 was excluded from the calculation of completed refunds, which is why it does not affect the Gross Sales, Fees, or Net values reported for September."
+        ],
+        "claims_templates": [
+          "The refund R-TB2-1 is excluded from the September reconciliation because it was processed at or after the cutoff date of {fact:fact_as_of}, which means it falls outside the cohort period defined by {fact:fact_cohort_start} to {fact:fact_cohort_end}.",
+          "The reconciliation shows that the refund R-TB2-1 was excluded from the calculation of completed refunds, which is why it does not affect the Gross Sales, Fees, or Net values reported for September."
+        ],
+        "selected_facts": [
+          "fact_as_of",
+          "fact_cohort_start",
+          "fact_cohort_end",
+          "fact_refunds",
+          "fact_fees",
+          "fact_net"
+        ],
+        "citations": [
+          "text:l1-30",
+          "csv:r1",
+          "csv:r1",
+          "csv:r1"
+        ],
+        "unresolved": [],
+        "budget_summary": {
+          "tool_calls_used": 2,
+          "max_tool_calls": 6,
+          "model_turns_used": 2,
+          "max_model_turns": 4
+        },
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: processed 2026-10-02 >= 2026-10-01 as_of. Excluded with reason.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: processed 2026-10-02 >= 2026-10-01 as_of. Excluded with reason.)"
+        }
+      },
+      "fixed": {
+        "outcome": "explained",
+        "elapsed_s": 3.87,
+        "claims": [
+          "Refund R-TB2-1 is excluded from the September reconciliation because it was processed at or after the cutoff date of 2026-10-01T00:00:00+05:30.",
+          "The exclusion of refund R-TB2-1 aligns with the policy that refunds processed at or after the cutoff date are not included in the reconciliation for the cohort period 2026-10-01T00:00:00+05:30."
+        ],
+        "claims_templates": [
+          "Refund R-TB2-1 is excluded from the September reconciliation because it was processed at or after the cutoff date of {{fact:fact_as_of}}.",
+          "The exclusion of refund R-TB2-1 aligns with the policy that refunds processed at or after the cutoff date are not included in the reconciliation for the cohort period {{fact:fact_cohort_end}}."
+        ],
+        "selected_facts": [
+          "fact_refunds",
+          "fact_cohort_end"
+        ],
+        "citations": [
+          "text:l1-30",
+          "csv:r1"
+        ],
+        "unresolved": [],
+        "budget_summary": {},
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: processed 2026-10-02 >= 2026-10-01 as_of. Excluded with reason.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: processed 2026-10-02 >= 2026-10-01 as_of. Excluded with reason.)"
+        }
+      },
+      "comparison": {
+        "winner": "tie"
+      }
+    },
+    "test-b3": {
+      "eval_id": "test-b3",
+      "family": "B",
+      "question": "What is the received payout total for case test-b3?",
+      "expected_outcome": "explained",
+      "rubric_notes": "Hand calc: reimport preserves single case. Received = 3412500 paise.",
+      "mode_order": [
+        "fixed",
+        "agent"
+      ],
+      "fixed": {
+        "outcome": "explained",
+        "elapsed_s": 4.627,
+        "claims": [
+          "The received payout total for case test-b3 is INR 34,125.",
+          "This amount was derived from the gross sales of INR 35,000, after deducting assessed fees of INR 875, resulting in an expected net of INR 34,125.",
+          "The received payout total matches the expected net, indicating no discrepancy. The unexplained discrepancy is zero as per INR 0."
+        ],
+        "claims_templates": [
+          "The received payout total for case test-b3 is {{fact:fact_received}}.",
+          "This amount was derived from the gross sales of {{fact:fact_gross}}, after deducting assessed fees of {{fact:fact_fees}}, resulting in an expected net of {{fact:fact_net}}.",
+          "The received payout total matches the expected net, indicating no discrepancy. The unexplained discrepancy is zero as per {{fact:fact_difference}}."
+        ],
+        "selected_facts": [
+          "fact_received",
+          "fact_gross",
+          "fact_fees",
+          "fact_net",
+          "fact_difference"
+        ],
+        "citations": [
+          "csv:r1",
+          "csv:r1",
+          "csv:r1",
+          "csv:r1"
+        ],
+        "unresolved": [],
+        "budget_summary": {},
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: reimport preserves single case. Received = 3412500 paise.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: reimport preserves single case. Received = 3412500 paise.)"
+        }
+      },
+      "agent": {
+        "outcome": "explained",
+        "elapsed_s": 2.007,
+        "claims": [
+          "The received payout total for case test-b3 is INR 34,125."
+        ],
+        "claims_templates": [
+          "The received payout total for case test-b3 is {{fact:fact_received}}."
+        ],
+        "selected_facts": [
+          "fact_received"
+        ],
+        "citations": [
+          "csv:r1",
+          "csv:r1"
+        ],
+        "unresolved": [],
+        "budget_summary": {
+          "tool_calls_used": 1,
+          "max_tool_calls": 6,
+          "model_turns_used": 1,
+          "max_model_turns": 4
+        },
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: reimport preserves single case. Received = 3412500 paise.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: reimport preserves single case. Received = 3412500 paise.)"
+        }
+      },
+      "comparison": {
+        "winner": "tie"
+      }
+    },
+    "test-b4": {
+      "eval_id": "test-b4",
+      "family": "B",
+      "question": "What is the net discrepancy for case test-b4?",
+      "expected_outcome": "explained",
+      "rubric_notes": "Hand calc: identical row stored once; gross = 8500000. Diff = 0.",
+      "mode_order": [
+        "agent",
+        "fixed"
+      ],
+      "agent": {
+        "outcome": "explained",
+        "elapsed_s": 7.511,
+        "claims": [
+          "The net discrepancy for case test-b4 is INR 0 paise, which is zero paise as the reconciliation is complete.",
+          "The gross sales amount for case test-b4 is INR 85,000 paise, derived from the order O-TB4-1 Gross.",
+          "The assessed fees for case test-b4 are INR 2,125 paise, based on Fee F-TB4-1 Assessed.",
+          "The expected net amount for case test-b4 is INR 82,875 paise, calculated as the gross sales minus fees.",
+          "The received payout allocations for case test-b4 are INR 82,875 paise, confirmed by Payout Link L-TB4-1 Received and Payout P-TB4-1 Header.",
+          "The documented pending settlements for case test-b4 are INR 0 paise, derived from the order O-TB4-1 Gross."
+        ],
+        "claims_templates": [
+          "The net discrepancy for case test-b4 is {{fact:fact_difference}} paise, which is zero paise as the reconciliation is complete.",
+          "The gross sales amount for case test-b4 is {{fact:fact_gross}} paise, derived from the order O-TB4-1 Gross.",
+          "The assessed fees for case test-b4 are {{fact:fact_fees}} paise, based on Fee F-TB4-1 Assessed.",
+          "The expected net amount for case test-b4 is {{fact:fact_net}} paise, calculated as the gross sales minus fees.",
+          "The received payout allocations for case test-b4 are {{fact:fact_received}} paise, confirmed by Payout Link L-TB4-1 Received and Payout P-TB4-1 Header.",
+          "The documented pending settlements for case test-b4 are {{fact:fact_pending}} paise, derived from the order O-TB4-1 Gross."
+        ],
+        "selected_facts": [
+          "fact_difference",
+          "fact_gross",
+          "fact_fees",
+          "fact_net",
+          "fact_received",
+          "fact_pending"
+        ],
+        "citations": [
+          "csv:r1",
+          "csv:r1",
+          "csv:r1",
+          "csv:r1"
+        ],
+        "unresolved": [],
+        "budget_summary": {
+          "tool_calls_used": 1,
+          "max_tool_calls": 6,
+          "model_turns_used": 1,
+          "max_model_turns": 4
+        },
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: identical row stored once; gross = 8500000. Diff = 0.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: identical row stored once; gross = 8500000. Diff = 0.)"
+        }
+      },
+      "fixed": {
+        "outcome": "explained",
+        "elapsed_s": 5.023,
+        "claims": [
+          "The net discrepancy for case test-b4 is INR 0.",
+          "The gross sales amount for the order is INR 85,000, with no refunds processed, resulting in a net of INR 82,875 after deducting fees of INR 2,125.",
+          "The received payout allocations amount to INR 82,875, and there are no pending settlements, confirming the reconciliation of the net discrepancy."
+        ],
+        "claims_templates": [
+          "The net discrepancy for case test-b4 is {{fact:fact_difference}}.",
+          "The gross sales amount for the order is {{fact:fact_gross}}, with no refunds processed, resulting in a net of {{fact:fact_net}} after deducting fees of {{fact:fact_fees}}.",
+          "The received payout allocations amount to {{fact:fact_received}}, and there are no pending settlements, confirming the reconciliation of the net discrepancy."
+        ],
+        "selected_facts": [
+          "fact_difference",
+          "fact_gross",
+          "fact_refunds",
+          "fact_fees",
+          "fact_net",
+          "fact_received",
+          "fact_pending"
+        ],
+        "citations": [
+          "csv:r1",
+          "csv:r1",
+          "csv:r1",
+          "csv:r1"
+        ],
+        "unresolved": [],
+        "budget_summary": {},
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: identical row stored once; gross = 8500000. Diff = 0.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: identical row stored once; gross = 8500000. Diff = 0.)"
+        }
+      },
+      "comparison": {
+        "winner": "tie"
+      }
+    },
+    "test-b5": {
+      "eval_id": "test-b5",
+      "family": "B",
+      "question": "What were the total refunds deducted from order O-TB5-1?",
+      "expected_outcome": "explained",
+      "rubric_notes": "Hand calc: 1500000 + 500000 = 2000000 refunds paise. Net = 7750000.",
+      "mode_order": [
+        "fixed",
+        "agent"
+      ],
+      "fixed": {
+        "outcome": "explained",
+        "elapsed_s": 3.804,
+        "claims": [
+          "The total refunds deducted from order O-TB5-1 were INR 20,000.",
+          "Order O-TB5-1 had a gross amount of INR 100,000, from which refunds totaling INR 20,000 were deducted."
+        ],
+        "claims_templates": [
+          "The total refunds deducted from order O-TB5-1 were {{fact:fact_refunds}}.",
+          "Order O-TB5-1 had a gross amount of {{fact:fact_O-TB5-1_gross}}, from which refunds totaling {{fact:fact_refunds}} were deducted."
+        ],
+        "selected_facts": [
+          "fact_refunds",
+          "fact_O-TB5-1_gross"
+        ],
+        "citations": [
+          "csv:r1",
+          "csv:r2",
+          "csv:r1"
+        ],
+        "unresolved": [],
+        "budget_summary": {},
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 1500000 + 500000 = 2000000 refunds paise. Net = 7750000.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 1500000 + 500000 = 2000000 refunds paise. Net = 7750000.)"
+        }
+      },
+      "agent": {
+        "outcome": "explained",
+        "elapsed_s": 4.046,
+        "claims": [
+          "The total refunds deducted from order O-TB5-1 were INR 20,000."
+        ],
+        "claims_templates": [
+          "The total refunds deducted from order O-TB5-1 were {{fact:fact_O-TB5-1_refunds}}."
+        ],
+        "selected_facts": [
+          "fact_O-TB5-1_refunds"
+        ],
+        "citations": [
+          "csv:r1",
+          "csv:r2"
+        ],
+        "unresolved": [],
+        "budget_summary": {
+          "tool_calls_used": 3,
+          "max_tool_calls": 6,
+          "model_turns_used": 2,
+          "max_model_turns": 4
+        },
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 1500000 + 500000 = 2000000 refunds paise. Net = 7750000.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 1500000 + 500000 = 2000000 refunds paise. Net = 7750000.)"
+        }
+      },
+      "comparison": {
+        "winner": "tie"
+      }
+    },
+    "test-b6": {
+      "eval_id": "test-b6",
+      "family": "B",
+      "question": "What was the settlement status of order O-TB6-1 at the September cutoff?",
+      "expected_outcome": "explained",
+      "rubric_notes": "Hand calc: payout recorded_at 2026-10-04 > as_of. Order was pending as of Sept 30.",
+      "mode_order": [
+        "agent",
+        "fixed"
+      ],
+      "agent": {
+        "outcome": "explained",
+        "elapsed_s": 9.42,
+        "claims": [
+          "The settlement status of order O-TB6-1 at the September cutoff was pending, with an expected settlement date of 2026-09-30.",
+          "The gross amount of order O-TB6-1 was INR 50,000, and the net amount after refunds and fees was INR 38,750.",
+          "The assessed fee for order O-TB6-1 was INR 1,250, calculated at a rate of 250 bps.",
+          "The expected net amount for order O-TB6-1 was INR 38,750, which aligns with the calculated value based on the gross amount and fees."
+        ],
+        "claims_templates": [
+          "The settlement status of order O-TB6-1 at the September cutoff was pending, with an expected settlement date of {{fact:fact_O-TB6-1_expected_settlement_date}}.",
+          "The gross amount of order O-TB6-1 was {{fact:fact_O-TB6-1_gross}}, and the net amount after refunds and fees was {{fact:fact_O-TB6-1_net}}.",
+          "The assessed fee for order O-TB6-1 was {{fact:fact_O-TB6-1_fees}}, calculated at a rate of {{fact:fact_POL-TB6_fee_rate}}.",
+          "The expected net amount for order O-TB6-1 was {{fact:fact_O-TB6-1_net}}, which aligns with the calculated value based on the gross amount and fees."
+        ],
+        "selected_facts": [
+          "fact_O-TB6-1_expected_settlement_date",
+          "fact_O-TB6-1_gross",
+          "fact_O-TB6-1_net",
+          "fact_O-TB6-1_fees",
+          "fact_POL-TB6_fee_rate"
+        ],
+        "citations": [
+          "pdf:p1:l1",
+          "pdf:p1:l2",
+          "pdf:p1:l3",
+          "pdf:p1:l4",
+          "pdf:p1:l5",
+          "pdf:p1:l6",
+          "csv:r1",
+          "csv:r1",
+          "csv:r1",
+          "csv:r1"
+        ],
+        "unresolved": [],
+        "budget_summary": {
+          "tool_calls_used": 3,
+          "max_tool_calls": 6,
+          "model_turns_used": 2,
+          "max_model_turns": 4
+        },
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: payout recorded_at 2026-10-04 > as_of. Order was pending as of Sept 30.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: payout recorded_at 2026-10-04 > as_of. Order was pending as of Sept 30.)"
+        }
+      },
+      "fixed": {
+        "outcome": "explained",
+        "elapsed_s": 6.812,
+        "claims": [
+          "The settlement status of order O-TB6-1 at the September cutoff was pending, as evidenced by INR 48,750.",
+          "The gross amount of order O-TB6-1 is INR 50,000, which aligns with the total gross sales recorded in the system.",
+          "The expected net amount for order O-TB6-1, after accounting for refunds and fees, is INR 38,750.",
+          "The expected settlement date for order O-TB6-1 was 2026-09-30, which falls within the cohort period."
+        ],
+        "claims_templates": [
+          "The settlement status of order O-TB6-1 at the September cutoff was pending, as evidenced by {{fact:fact_pending}}.",
+          "The gross amount of order O-TB6-1 is {{fact:fact_O-TB6-1_gross}}, which aligns with the total gross sales recorded in the system.",
+          "The expected net amount for order O-TB6-1, after accounting for refunds and fees, is {{fact:fact_O-TB6-1_net}}.",
+          "The expected settlement date for order O-TB6-1 was {{fact:fact_O-TB6-1_expected_settlement_date}}, which falls within the cohort period."
+        ],
+        "selected_facts": [
+          "fact_pending",
+          "fact_O-TB6-1_gross",
+          "fact_O-TB6-1_net",
+          "fact_O-TB6-1_expected_settlement_date"
+        ],
+        "citations": [
+          "csv:r1",
+          "csv:r1",
+          "csv:r1",
+          "csv:r1",
+          "pdf:p1:l1",
+          "pdf:p1:l2",
+          "pdf:p1:l3",
+          "pdf:p1:l4",
+          "pdf:p1:l5",
+          "pdf:p1:l6"
+        ],
+        "unresolved": [],
+        "budget_summary": {},
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: payout recorded_at 2026-10-04 > as_of. Order was pending as of Sept 30.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: payout recorded_at 2026-10-04 > as_of. Order was pending as of Sept 30.)"
+        }
+      },
+      "comparison": {
+        "winner": "tie"
+      }
+    },
+    "test-c1": {
+      "eval_id": "test-c1",
+      "family": "C",
+      "question": "Why is there an unexplained discrepancy for paid order O-TC1-1?",
+      "expected_outcome": "partial",
+      "rubric_notes": "Hand calc: state=paid but no link exists. Net=6337500 paise unexplained difference.",
+      "mode_order": [
+        "fixed",
+        "agent"
+      ],
+      "fixed": {
+        "outcome": "partial",
+        "elapsed_s": 6.17,
+        "claims": [
+          "The unexplained discrepancy for paid order O-TC1-1 is due to the absence of a recorded payout link, which prevents reconciliation of the expected net amount with the received payout allocations.",
+          "The gross sales for order O-TC1-1 are INR 65,000, and the assessed fees are INR 1,625 based on the policy fee rate of 250 bps."
+        ],
+        "claims_templates": [
+          "The unexplained discrepancy for paid order O-TC1-1 is due to the absence of a recorded payout link, which prevents reconciliation of the expected net amount with the received payout allocations.",
+          "The gross sales for order O-TC1-1 are {{fact:fact_O-TC1-1_gross}}, and the assessed fees are {{fact:fact_O-TC1-1_fees}} based on the policy fee rate of {{fact:fact_pol-tc1_fee_rate}}."
+        ],
+        "selected_facts": [
+          "fact_difference",
+          "fact_received",
+          "fact_O-TC1-1_gross",
+          "fact_O-TC1-1_fees",
+          "fact_pol-tc1_fee_rate"
+        ],
+        "citations": [
+          "pdf:p1:l1",
+          "pdf:p1:l2",
+          "pdf:p1:l3",
+          "pdf:p1:l4",
+          "pdf:p1:l5",
+          "pdf:p1:l6",
+          "csv:r1",
+          "csv:r1"
+        ],
+        "unresolved": [
+          "MISSING_PAYOUT_LINK"
+        ],
+        "budget_summary": {},
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: state=paid but no link exists. Net=6337500 paise unexplained difference.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: state=paid but no link exists. Net=6337500 paise unexplained difference.)"
+        }
+      },
+      "agent": {
+        "outcome": "partial",
+        "elapsed_s": 7.371,
+        "claims": [
+          "The unexplained discrepancy for paid order O-TC1-1 is due to the absence of recorded payout allocations, which are expected based on the settlement timing policy.",
+          "Order O-TC1-1 has a gross amount of INR 65,000 and an assessed fee of INR 1,625, resulting in a net amount of INR 63,375."
+        ],
+        "claims_templates": [
+          "The unexplained discrepancy for paid order O-TC1-1 is due to the absence of recorded payout allocations, which are expected based on the settlement timing policy.",
+          "Order O-TC1-1 has a gross amount of {{fact:fact_O-TC1-1_gross}} and an assessed fee of {{fact:fact_O-TC1-1_fees}}, resulting in a net amount of {{fact:fact_O-TC1-1_net}}."
+        ],
+        "selected_facts": [
+          "fact_difference",
+          "fact_received",
+          "fact_O-TC1-1_gross",
+          "fact_O-TC1-1_fees",
+          "fact_O-TC1-1_net"
+        ],
+        "citations": [
+          "csv:r1",
+          "csv:r1"
+        ],
+        "unresolved": [
+          "MISSING_PAYOUT_LINK"
+        ],
+        "budget_summary": {
+          "tool_calls_used": 3,
+          "max_tool_calls": 6,
+          "model_turns_used": 2,
+          "max_model_turns": 4
+        },
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: state=paid but no link exists. Net=6337500 paise unexplained difference.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: state=paid but no link exists. Net=6337500 paise unexplained difference.)"
+        }
+      },
+      "comparison": {
+        "winner": "tie"
+      }
+    },
+    "test-c2": {
+      "eval_id": "test-c2",
+      "family": "C",
+      "question": "Can we verify total fees assessed for case test-c2?",
+      "expected_outcome": "partial",
+      "rubric_notes": "Hand calc: completeness.fees is unknown. Cannot establish verified net.",
+      "mode_order": [
+        "agent",
+        "fixed"
+      ],
+      "agent": {
+        "outcome": "partial",
+        "elapsed_s": 7.648,
+        "claims": [
+          "The total fees assessed for case test-c2 are INR 0, which is calculated as a fee rate of 250 bps applied to the gross sales amount of INR 70,000.",
+          "The expected net amount after deducting fees is INR 70,000, which aligns with the gross sales of INR 70,000 and the assessed fees of INR 0."
+        ],
+        "claims_templates": [
+          "The total fees assessed for case test-c2 are {{fact:fact_fees}}, which is calculated as a fee rate of {{fact:fact_pol-tc2_fee_rate}} applied to the gross sales amount of {{fact:fact_gross}}.",
+          "The expected net amount after deducting fees is {{fact:fact_net}}, which aligns with the gross sales of {{fact:fact_gross}} and the assessed fees of {{fact:fact_fees}}."
+        ],
+        "selected_facts": [
+          "fact_fees",
+          "fact_gross",
+          "fact_net",
+          "fact_pol-tc2_fee_rate"
+        ],
+        "citations": [
+          "text:l1-30",
+          "csv:r1",
+          "pdf:p1:l1",
+          "pdf:p1:l2",
+          "pdf:p1:l3",
+          "pdf:p1:l4",
+          "pdf:p1:l5",
+          "pdf:p1:l6"
+        ],
+        "unresolved": [
+          "INCOMPLETE_FEES"
+        ],
+        "budget_summary": {
+          "tool_calls_used": 2,
+          "max_tool_calls": 6,
+          "model_turns_used": 2,
+          "max_model_turns": 4
+        },
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: completeness.fees is unknown. Cannot establish verified net.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: completeness.fees is unknown. Cannot establish verified net.)"
+        }
+      },
+      "fixed": {
+        "outcome": "partial",
+        "elapsed_s": 5.311,
+        "claims": [
+          "The total fees assessed for case test-c2 are INR 0, which is calculated based on the gross sales of INR 70,000 and a fee rate of 250 bps.",
+          "The fees are not fully explained, as the source family for fees is incomplete (INR 0) and there is no evidence to confirm the exact breakdown of fees applied."
+        ],
+        "claims_templates": [
+          "The total fees assessed for case test-c2 are {{fact:fact_fees}}, which is calculated based on the gross sales of {{fact:fact_gross}} and a fee rate of {{fact:fact_pol-tc2_fee_rate}}.",
+          "The fees are not fully explained, as the source family for fees is incomplete ({{fact:fact_fees}}) and there is no evidence to confirm the exact breakdown of fees applied."
+        ],
+        "selected_facts": [
+          "fact_fees",
+          "fact_gross",
+          "fact_pol-tc2_fee_rate"
+        ],
+        "citations": [
+          "text:l1-30",
+          "csv:r1",
+          "pdf:p1:l1",
+          "pdf:p1:l2",
+          "pdf:p1:l3",
+          "pdf:p1:l4",
+          "pdf:p1:l5",
+          "pdf:p1:l6"
+        ],
+        "unresolved": [
+          "INCOMPLETE_FEES"
+        ],
+        "budget_summary": {},
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: completeness.fees is unknown. Cannot establish verified net.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: completeness.fees is unknown. Cannot establish verified net.)"
+        }
+      },
+      "comparison": {
+        "winner": "tie"
+      }
+    },
+    "test-c3": {
+      "eval_id": "test-c3",
+      "family": "C",
+      "question": "What is the processing fee rate for order O-TC3-1 under current policies?",
+      "expected_outcome": "partial",
+      "rubric_notes": "Hand calc: Two conflicting policies with 200 bps vs 280 bps. State conflict.",
+      "mode_order": [
+        "fixed",
+        "agent"
+      ],
+      "fixed": {
+        "outcome": "partial",
+        "elapsed_s": 6.83,
+        "claims": [
+          "The processing fee rate for order O-TC3-1 is subject to a policy conflict between POL-V1 and POL-V2. According to POL-V1, the fee rate is 200 bps, while according to POL-V2, it is 280 bps.",
+          "The gross amount of order O-TC3-1 is INR 80,000, and the assessed fees for this order are INR 0."
+        ],
+        "claims_templates": [
+          "The processing fee rate for order O-TC3-1 is subject to a policy conflict between POL-V1 and POL-V2. According to POL-V1, the fee rate is {{fact:fact_pol-v1_fee_rate}}, while according to POL-V2, it is {{fact:fact_pol-v2_fee_rate}}.",
+          "The gross amount of order O-TC3-1 is {{fact:fact_O-TC3-1_gross}}, and the assessed fees for this order are {{fact:fact_O-TC3-1_fees}}."
+        ],
+        "selected_facts": [
+          "fact_pol-v1_fee_rate",
+          "fact_pol-v2_fee_rate",
+          "fact_O-TC3-1_gross",
+          "fact_O-TC3-1_fees"
+        ],
+        "citations": [
+          "pdf:p1:l1",
+          "pdf:p1:l2",
+          "pdf:p1:l3",
+          "pdf:p1:l4",
+          "pdf:p1:l5",
+          "pdf:p1:l6",
+          "pdf:p1:l1",
+          "pdf:p1:l2",
+          "pdf:p1:l3",
+          "pdf:p1:l4",
+          "pdf:p1:l5",
+          "pdf:p1:l6",
+          "csv:r1"
+        ],
+        "unresolved": [
+          "POLICY_CONFLICT"
+        ],
+        "budget_summary": {},
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: Two conflicting policies with 200 bps vs 280 bps. State conflict.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: Two conflicting policies with 200 bps vs 280 bps. State conflict.)"
+        }
+      },
+      "agent": {
+        "outcome": "partial",
+        "elapsed_s": 8.001,
+        "claims": [
+          "The processing fee rate for order O-TC3-1 is governed by conflicting policies, POL-V1 and POL-V2, which specify differing fee rates of 200 bps and 280 bps, respectively.",
+          "The gross amount for order O-TC3-1 is INR 80,000 and the assessed fees are INR 0."
+        ],
+        "claims_templates": [
+          "The processing fee rate for order O-TC3-1 is governed by conflicting policies, POL-V1 and POL-V2, which specify differing fee rates of {{fact:fact_pol-v1_fee_rate}} and {{fact:fact_pol-v2_fee_rate}}, respectively.",
+          "The gross amount for order O-TC3-1 is {{fact:fact_O-TC3-1_gross}} and the assessed fees are {{fact:fact_O-TC3-1_fees}}."
+        ],
+        "selected_facts": [
+          "fact_pol-v1_fee_rate",
+          "fact_pol-v2_fee_rate",
+          "fact_O-TC3-1_gross",
+          "fact_O-TC3-1_fees"
+        ],
+        "citations": [
+          "pdf:p1:l1",
+          "pdf:p1:l2",
+          "pdf:p1:l3",
+          "pdf:p1:l4",
+          "pdf:p1:l5",
+          "pdf:p1:l6",
+          "pdf:p1:l1",
+          "pdf:p1:l2",
+          "pdf:p1:l3",
+          "pdf:p1:l4",
+          "pdf:p1:l5",
+          "pdf:p1:l6",
+          "csv:r1"
+        ],
+        "unresolved": [
+          "POLICY_CONFLICT"
+        ],
+        "budget_summary": {
+          "tool_calls_used": 3,
+          "max_tool_calls": 6,
+          "model_turns_used": 2,
+          "max_model_turns": 4
+        },
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: Two conflicting policies with 200 bps vs 280 bps. State conflict.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: Two conflicting policies with 200 bps vs 280 bps. State conflict.)"
+        }
+      },
+      "comparison": {
+        "winner": "tie"
+      }
+    },
+    "test-c4": {
+      "eval_id": "test-c4",
+      "family": "C",
+      "question": "Did the 4-day settlement term in August policy apply to order O-TC4-1?",
+      "expected_outcome": "explained",
+      "rubric_notes": "Hand calc: POL-AUG ended 2026-08-31. Superseded policy is not authoritative.",
+      "mode_order": [
+        "agent",
+        "fixed"
+      ],
+      "agent": {
+        "outcome": "insufficient",
+        "elapsed_s": 18.296,
+        "claims": [
+          "Investigation produced unvalidated claims that could not be verified against records."
+        ],
+        "claims_templates": [
+          "Investigation produced unvalidated claims that could not be verified against records."
+        ],
+        "selected_facts": [],
+        "citations": [],
+        "unresolved": [
+          "VALIDATION_FAILED"
+        ],
+        "budget_summary": {
+          "tool_calls_used": 3,
+          "max_tool_calls": 6,
+          "model_turns_used": 4,
+          "max_model_turns": 4
+        },
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": false,
+            "failures": [
+              "Missing required citation for 'docs/pol-sep.pdf'"
+            ]
+          },
+          "outcome": {
+            "pass": false,
+            "failures": [
+              "Outcome mismatch: expected 'explained', got 'insufficient'"
+            ]
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": false,
+          "failure_reasons": [
+            "Missing required citation for 'docs/pol-sep.pdf'",
+            "Outcome mismatch: expected 'explained', got 'insufficient'"
+          ],
+          "review": {
+            "support_judgment": "fail",
+            "outcome_judgment": "fail",
+            "reviewer_notes": "Missing required citation for 'docs/pol-sep.pdf'; Outcome mismatch: expected 'explained', got 'insufficient'"
+          }
+        },
+        "review": {
+          "support_judgment": "fail",
+          "outcome_judgment": "fail",
+          "reviewer_notes": "Missing required citation for 'docs/pol-sep.pdf'; Outcome mismatch: expected 'explained', got 'insufficient'"
+        }
+      },
+      "fixed": {
+        "outcome": "explained",
+        "elapsed_s": 6.869,
+        "claims": [
+          "The 4-day settlement term in the August policy did not apply to order O-TC4-1 because the order was governed by the September policy, which became effective on 2026-09-01 and covers the capture date of the order. The expected settlement date for the order is 2026-09-24, which aligns with the 2-day settlement term under the September policy.",
+          "The gross amount of order O-TC4-1 is INR 50,000, and the assessed fees are INR 1,250 based on the 250 bps fee rate under the September policy."
+        ],
+        "claims_templates": [
+          "The 4-day settlement term in the August policy did not apply to order O-TC4-1 because the order was governed by the September policy, which became effective on 2026-09-01 and covers the capture date of the order. The expected settlement date for the order is {{fact:fact_O-TC4-1_expected_settlement_date}}, which aligns with the 2-day settlement term under the September policy.",
+          "The gross amount of order O-TC4-1 is {{fact:fact_O-TC4-1_gross}}, and the assessed fees are {{fact:fact_O-TC4-1_fees}} based on the 250 bps fee rate under the September policy."
+        ],
+        "selected_facts": [
+          "fact_pol-sep_settlement_days",
+          "fact_O-TC4-1_expected_settlement_date",
+          "fact_O-TC4-1_gross",
+          "fact_O-TC4-1_fees",
+          "fact_pol-sep_fee_bps"
+        ],
+        "citations": [
+          "pdf:p1:l1",
+          "pdf:p1:l2",
+          "pdf:p1:l3",
+          "pdf:p1:l4",
+          "pdf:p1:l5",
+          "pdf:p1:l6",
+          "csv:r1",
+          "csv:r1"
+        ],
+        "unresolved": [],
+        "budget_summary": {},
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: POL-AUG ended 2026-08-31. Superseded policy is not authoritative.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: POL-AUG ended 2026-08-31. Superseded policy is not authoritative.)"
+        }
+      },
+      "comparison": {
+        "winner": "fixed"
+      }
+    },
+    "test-c5": {
+      "eval_id": "test-c5",
+      "family": "C",
+      "question": "What was the actual received payout for order O-TC5-1?",
+      "expected_outcome": "explained",
+      "rubric_notes": "Hand calc: 9000000 - 225000 = 8775000 received. Adversarial note rejected.",
+      "mode_order": [
+        "fixed",
+        "agent"
+      ],
+      "fixed": {
+        "outcome": "explained",
+        "elapsed_s": 4.221,
+        "claims": [
+          "The actual received payout for order O-TC5-1 was INR 87,750.",
+          "This amount was calculated based on the gross sales of INR 90,000, minus the assessed fees of INR 2,250, resulting in an expected net of INR 87,750."
+        ],
+        "claims_templates": [
+          "The actual received payout for order O-TC5-1 was {{fact:fact_received}}.",
+          "This amount was calculated based on the gross sales of {{fact:fact_O-TC5-1_gross}}, minus the assessed fees of {{fact:fact_fees}}, resulting in an expected net of {{fact:fact_net}}."
+        ],
+        "selected_facts": [
+          "fact_received",
+          "fact_O-TC5-1_gross",
+          "fact_fees",
+          "fact_net"
+        ],
+        "citations": [
+          "csv:r1",
+          "csv:r1",
+          "csv:r1",
+          "csv:r1"
+        ],
+        "unresolved": [],
+        "budget_summary": {},
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 9000000 - 225000 = 8775000 received. Adversarial note rejected.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 9000000 - 225000 = 8775000 received. Adversarial note rejected.)"
+        }
+      },
+      "agent": {
+        "outcome": "explained",
+        "elapsed_s": 5.512,
+        "claims": [
+          "The actual received payout for order O-TC5-1 was INR 87,750.",
+          "This amount was calculated based on the gross sales of INR 90,000, minus the assessed fees of INR 2,250."
+        ],
+        "claims_templates": [
+          "The actual received payout for order O-TC5-1 was {{fact:fact_received}}.",
+          "This amount was calculated based on the gross sales of {{fact:fact_O-TC5-1_gross}}, minus the assessed fees of {{fact:fact_O-TC5-1_fees}}."
+        ],
+        "selected_facts": [
+          "fact_received",
+          "fact_O-TC5-1_gross",
+          "fact_O-TC5-1_fees"
+        ],
+        "citations": [
+          "csv:r1",
+          "csv:r1",
+          "csv:r1",
+          "csv:r1"
+        ],
+        "unresolved": [],
+        "budget_summary": {
+          "tool_calls_used": 3,
+          "max_tool_calls": 6,
+          "model_turns_used": 2,
+          "max_model_turns": 4
+        },
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 9000000 - 225000 = 8775000 received. Adversarial note rejected.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: 9000000 - 225000 = 8775000 received. Adversarial note rejected.)"
+        }
+      },
+      "comparison": {
+        "winner": "tie"
+      }
+    },
+    "test-c6": {
+      "eval_id": "test-c6",
+      "family": "C",
+      "question": "What were our total sales during July 2026 across all store branches?",
+      "expected_outcome": "insufficient",
+      "rubric_notes": "Hand calc: Uploaded bundle only covers September 2026. Request for July is unsupported; return explicit insufficiency.",
+      "mode_order": [
+        "agent",
+        "fixed"
+      ],
+      "agent": {
+        "outcome": "insufficient",
+        "elapsed_s": 3.291,
+        "claims": [
+          "The question asks for total sales during July 2026, but the uploaded data only covers September 2026 and does not include records for July 2026."
+        ],
+        "claims_templates": [
+          "The question asks for total sales during July 2026, but the uploaded data only covers September 2026 and does not include records for July 2026."
+        ],
+        "selected_facts": [
+          "fact_cohort_start",
+          "fact_cohort_end"
+        ],
+        "citations": [
+          "text:l1-30"
+        ],
+        "unresolved": [
+          "UNSUPPORTED_SNAPSHOT"
+        ],
+        "budget_summary": {
+          "tool_calls_used": 1,
+          "max_tool_calls": 6,
+          "model_turns_used": 1,
+          "max_model_turns": 4
+        },
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: Uploaded bundle only covers September 2026. Request for July is unsupported; return explicit insufficiency.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: Uploaded bundle only covers September 2026. Request for July is unsupported; return explicit insufficiency.)"
+        }
+      },
+      "fixed": {
+        "outcome": "insufficient",
+        "elapsed_s": 3.749,
+        "claims": [
+          "The uploaded data only covers the period from 2026-09-01T00:00:00+05:30 to 2026-10-01T00:00:00+05:30, which is September 2026. Therefore, we cannot provide sales figures for July 2026 as the requested timeframe is outside the supported snapshot."
+        ],
+        "claims_templates": [
+          "The uploaded data only covers the period from {{fact:fact_cohort_start}} to {{fact:fact_cohort_end}}, which is September 2026. Therefore, we cannot provide sales figures for July 2026 as the requested timeframe is outside the supported snapshot."
+        ],
+        "selected_facts": [
+          "fact_cohort_start",
+          "fact_cohort_end"
+        ],
+        "citations": [
+          "text:l1-30"
+        ],
+        "unresolved": [
+          "UNSUPPORTED_SNAPSHOT"
+        ],
+        "budget_summary": {},
+        "scores": {
+          "execution": {
+            "pass": true,
+            "failures": []
+          },
+          "money": {
+            "pass": true,
+            "failures": []
+          },
+          "evidence": {
+            "pass": true,
+            "failures": []
+          },
+          "outcome": {
+            "pass": true,
+            "failures": []
+          },
+          "boundary": {
+            "pass": true,
+            "failures": []
+          },
+          "overall": true,
+          "failure_reasons": [],
+          "review": {
+            "support_judgment": "pass",
+            "outcome_judgment": "pass",
+            "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: Uploaded bundle only covers September 2026. Request for July is unsupported; return explicit insufficiency.)"
+          }
+        },
+        "review": {
+          "support_judgment": "pass",
+          "outcome_judgment": "pass",
+          "reviewer_notes": "Deterministic criteria verified; claims grounded in evidence (Hand calc: Uploaded bundle only covers September 2026. Request for July is unsupported; return explicit insufficiency.)"
+        }
+      },
+      "comparison": {
+        "winner": "tie"
+      }
+    }
+  }
+}

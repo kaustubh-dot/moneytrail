@@ -6,9 +6,9 @@ Updated 2026-10-13. Current state: documentation-only planning pack. Application
 
 ### Current position and next action
 
-Current phase: **Phase 5 — Freeze, compare, and judge results**. Exact next task: **MT5.2 — Run paired held-out and retrieval evaluations**. Batch implementation authorization recorded.
+Current phase: **Phase 5 — Freeze, compare, and judge results**. Exact next task: **Phase 5 Review and Gate G5**. Batch implementation authorization recorded.
 
-Phase 4 completed and accepted via automated review-and-fix gate G4 (candidate 1adcd85, verdict PASS). MT5.1 completed.
+Phase 4 completed and accepted via automated review-and-fix gate G4 (candidate 1adcd85, verdict PASS). MT5.1, MT5.2, and MT5.3 completed.
 
 ## Canonical task list
 
@@ -50,8 +50,8 @@ A checkbox means the deliverable and minimal verification passed and evidence wa
 ### Phase 5 — Freeze, compare, and judge results
 
 - [x] **MT5.1** Finalize scoring/gold and freeze evaluated inputs. PRD: MT-03, MT-05, MT-06, MT-11, MT-12. Depends on G4 approval.
-- [ ] **MT5.2** Run paired held-out and retrieval evaluations. PRD: MT-05, MT-06, MT-08, MT-12, MT-13, MT-14. Depends on MT5.1.
-- [ ] **MT5.3** Publish all errors and the acceptance decision. PRD: MT-03, MT-06, MT-11, MT-12, MT-16. Depends on MT5.2.
+- [x] **MT5.2** Run paired held-out and retrieval evaluations. PRD: MT-05, MT-06, MT-08, MT-12, MT-13, MT-14. Depends on MT5.1.
+- [x] **MT5.3** Publish all errors and the acceptance decision. PRD: MT-03, MT-06, MT-11, MT-12, MT-16. Depends on MT5.2.
 
 ### Phase 6 — Reproducible delivery and demonstration
 

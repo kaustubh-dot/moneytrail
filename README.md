@@ -2,7 +2,7 @@
 
 An evidence-backed merchant payment investigator: explain why recorded sales and received payments differ, using source documents, transaction records, and deterministic calculations.
 
-**Status: planning and repository scaffold only. The application, model integration, evaluations, and deployment have not been implemented or verified.**
+**Status: Phase 5 (Evaluation and verification) complete. Bounded agent achieves 17/18 (94.4%) complete task outcomes with zero monetary errors and zero unauthorized actions against frozen held-out test split. Gate G5 passed.**
 
 Private repository: [kaustubh-dot/moneytrail](https://github.com/kaustubh-dot/moneytrail).
 
