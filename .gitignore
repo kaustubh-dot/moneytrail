@@ -1,0 +1,47 @@
+# Local credentials and configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+id_rsa
+id_ed25519
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# Frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+
+# Runtime data; reviewed synthetic fixtures live under fixtures/ and evals/
+data/*
+!data/.gitkeep
+artifacts/local/
+evals/results/local/
+*.log
+*.sqlite
+*.sqlite3
+*.safetensors
+*.gguf
+*.pt
+*.onnx
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

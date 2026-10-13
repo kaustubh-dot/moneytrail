@@ -1,0 +1,62 @@
+# MoneyTrail product requirements — scope baseline v1
+
+Prepared 2026-10-13. Status: planning only; no application, fixture, model capability, evaluation score, or deployment is represented as complete. This is the scope baseline to review at gate G0. Once accepted, changes to mandatory scope require a recorded reason, alternatives, impact, and user approval in [TASKS.md](TASKS.md). Preparing these documents does not authorize application implementation.
+
+## Original vision
+
+MoneyTrail is a merchant payment discrepancy investigator. A single owner imports a supported synthetic merchant bundle, asks a natural-language question such as “Why did we receive less than our September sales?”, and receives a grounded explanation connected to orders, refunds, fees, payout records, payout policy documents, and correspondence. Deterministic tools calculate every amount. The investigator selects and connects evidence, explains timing and deductions, and states what cannot be established.
+
+The target user is a merchant operator reviewing a payout discrepancy; the implemented demonstration uses one fictional merchant, Meridian Store, and INR only. The engineering audience should be able to inspect exactly how evidence, database queries, accounting, retrieval, and bounded model decisions produced an answer. This is more than document question answering: a successful investigation joins structured transaction evidence with policies that applied on the relevant dates and exposes the calculation and source records.
+
+The desired outcome is a reproducible, locally operated portfolio application that accepts real supported uploads and answers free-text questions about their content. It must not become a seed-only dashboard, a list of predefined questions, a generic annual-report RAG chatbot, or a financial ledger platform.
+
+## Canonical demonstration and accounting boundary
+
+The main fixture reports gross captured sales of INR 240,000, completed refunds of INR 18,000, assessed fees of INR 6,000, documented pending settlement of INR 30,000, and received payout allocations of INR 186,000. Integer paise are the only stored or calculated monetary representation.
+
+For a closed cohort of captured orders, evaluated at the bundle's declared cutoff:
+
+`gross − completed_refunds − assessed_fees = received_allocations + documented_pending + unexplained_difference`
+
+The sample difference is zero: `24,000,000 − 1,800,000 − 600,000 = 18,600,000 + 3,000,000 + 0` paise. Pending is established from explicit pending order state and supporting records; it is never assigned the residual merely to make the identity balance. “Received” means the synthetic payout record states receipt and its order allocation is supported; there is no independent bank verification.
+
+The supported cohort, snapshot cutoff, whole-order payout allocation, duplicate handling, partial knowledge, and policy date rules are defined once in [ARCHITECTURE.md](ARCHITECTURE.md#accounting-and-time-contract). A policy may explain an expected timing or fee; it never replaces actual refund, fee, or payout records. A complete mathematical equality alone does not prove adequate evidence.
+
+## Mandatory requirements and acceptance
+
+| ID | Requirement | Measurable acceptance |
+| --- | --- | --- |
+| MT-01 | Actual supported bundle upload | The owner uploads the documented ZIP format through the UI and API. One transaction makes a fully parsed and indexed case visible. Re-uploading the identical logical bundle returns the same case without increasing record/chunk counts. A malformed file or failed extraction/index step leaves no usable case. A valid bundle with explicitly recorded business evidence gaps may be `ready_with_gaps`; this is distinct from a partial import. |
+| MT-02 | Inspectable provenance | Every imported record and retained text segment has an immutable case/source identity and CSV data-row, PDF page plus extracted-line, or TXT/MD line locator. Every displayed citation opens that exact evidence. Identical rows/files are reported as duplicates; conflicting record identities reject the import with filename and row details. No source is silently discarded. |
+| MT-03 | Financial integrity | All amounts use validated integer paise and deterministic SQL/Python calculations. The main fixture produces all five exact demonstration totals and zero unexplained difference. Missing links, ambiguous settlement state, negative net, and mismatched payout allocations prevent an unqualified reconciliation. Tests prove that refunds/fees/payout headers are not double-counted and that duplicate imports leave totals unchanged. |
+| MT-04 | Controlled structured-data investigation | The investigator can inspect order records, related refunds/fees/payout allocations, and a cohort reconciliation through typed, parameterized, read-only tools. It never supplies unrestricted SQL. Cross-case identifiers fail closed. The database tool role cannot modify business records. |
+| MT-05 | Useful hybrid retrieval | Search combines PostgreSQL full-text and exact dense retrieval, fuses candidates, and reranks them before context selection. Both a payout-policy PDF and correspondence are retrievable and cited. The held-out retrieval gate in EVALUATION measures critical evidence recall with an explicit denominator. |
+| MT-06 | Grounded answer and honest uncertainty | An answer contains outcome, explanation, deterministic facts, citations, and unresolved evidence. Monetary output comes only from validated tool facts. Every returned monetary fact is correct; every material factual explanation is supported by the cited records or text. Missing/conflicting critical evidence produces `partial` or `insufficient`, never invented amounts, an unsupported resolution, or a fabricated payment action. |
+| MT-07 | Policy as of the relevant date | Policy applicability uses the captured order's local date and explicit effective intervals. A dated, superseded policy cannot silently govern a later order. Overlapping applicable policies with different terms are reported as conflict and cited together. Correspondence can supply context but cannot silently override an approved policy record. |
+| MT-08 | Bounded investigator | One LangGraph investigator supports free-text questions within the defined domain. A run uses at most six dispatched tool calls, four model calls, and 240 seconds by default. Limits, cancellation, model unavailability, invalid structured output, and tool errors have visible terminal outcomes. No hidden continuation, arbitrary tool dispatch, or hosted fallback occurs. |
+| MT-09 | Explicit context and working memory | Context assembly measures tokens using the locked model tokenizer and never exceeds the 6,000-input-token default. Working memory contains the current case/question, evidence/fact references, unresolved items, and budget counters. It does not accumulate chat history or expose internal reasoning. An over-budget essential context produces an actionable error. |
+| MT-10 | Complete owner workflow | From a fresh supported import, the owner can select the case, enter an original question, start a run, see progress through polling, cancel it, read the result/totals, inspect sources, and view a concise execution trace. A live demonstration covers normal settlement, refund/duplicate handling, and missing/conflicting evidence. An offline provider produces a clear error rather than a successful-looking answer. |
+| MT-11 | Material security boundaries | All `/api/v1` routes require the owner bearer token; only health and static assets are public. The token stays in browser memory and is not stored in local/session storage or logs. Local binding, safe ZIP extraction, strict type/size limits, per-case SQL scoping, and read-only business tools are enforced. Adversarial source instructions cannot cause secret disclosure, external access, cross-case reads, or writes. |
+| MT-12 | Measured LLM, RAG, and investigator quality | A frozen set of 12 development and 18 held-out cases covers the three fixture families. The final investigator reaches at least 15/18 correct task outcomes, with zero fabricated/incorrect returned money and zero material unauthorized access. The same 18 cases are run through the fixed-workflow baseline and bounded investigator. Metrics, individual errors, corpus/model hashes, and limitations are retained; scores are not assumed or thresholds reduced after observing failures. |
+| MT-13 | Verified local inference | Phase 0 records the actual model digest, tokenizer/model revisions, dependency versions, hardware, structured-output behavior, tool-decision behavior, memory use, and latency. The initial candidate is Ollama `qwen3:8b`; its suitability and the lab GPU's exact VRAM are unverified until measured. There is one inference provider and no paid fallback. If the pilot fails, stop and present evidence and alternatives for user review. |
+| MT-14 | Traceable execution | Each run records sanitized, ordered local events with elapsed times, tool arguments/results references, retrieval IDs/scores, token counts, model identity, terminal outcome, and error codes. The UI can show this trace without secrets, raw hidden reasoning, or an external tracing service. Cancellation and process interruption remain distinguishable from a completed answer. |
+| MT-15 | Reproducible delivery | The finished project has pinned Python/frontend dependencies and model revisions, numbered SQL schema changes, a minimal Docker/Compose setup, one offline GitHub Actions workflow, and accurate clean-clone instructions. A clean setup uploads the fixture and completes a live investigation. The offline CI does not require GPU access, model downloads, or a hosted API key. |
+| MT-16 | Faithful scope and handoff | Every roadmap task links to these requirements and records verification and review status in TASKS. Each phase ends with a Git checkpoint and an explicit stop for user review before dependent work. The final README states implemented behavior, known limits, a reliable demonstration, and interview preparation; no planned feature or synthetic evaluation is described as production or hiring proof. |
+
+## In scope
+
+One local owner, one fictional merchant, immutable independent cases, INR, English questions/output, structured CSV evidence, text-native policy PDFs, UTF-8 TXT/MD correspondence, actual ZIP upload, source viewing, deterministic reconciliation, hybrid retrieval/reranking, a bounded investigator, local model serving, local traces, small meaningful evaluations, and a simple reproducible deployment.
+
+The fixture collection contains three families: normal timing/fees; refund/duplicate import; missing/conflicting evidence. It includes a self-contained main demo bundle and independently generated development/held-out source packs. Question wording is not restricted to a canned menu. Gold answers stay outside the imported bundles and retrieval corpus.
+
+## Explicit non-goals
+
+No banking integration, payment initiation, money movement, real customer PII, live merchant onboarding, public uploads, account framework, trading, tax advice, credit decisions, fraud decisions, personal-finance CRUD, general ledger, chargebacks, reserves, foreign exchange, partial settlement allocations, or arbitrary accounting periods outside the imported snapshot contract.
+
+No OCR/scanned PDFs, images/audio/video, unrestricted SQL, web-browsing tools, MCP server, multi-agent team, graph database, microservices, queue/broker, distributed workers, generic agent framework, vector search service, elaborate migration framework, external observability stack, or speculative cache. Fine-tuning is not an active phase or completion criterion; only a documented baseline failure and separate user approval may activate a later proposal.
+
+## Completion and review
+
+Passing acceptance requires implemented behavior and recorded evidence, not the existence of planned files. The architecture is the interface/data/configuration source of truth; EVALUATION owns metrics and fixtures; ROADMAP owns execution instructions; TASKS alone owns checkbox status and approval history. Resolve any disagreement in favor of this original vision and record the change before proceeding.
+
+Gate G0 reviews this v1 scope and measured feasibility. Gates G1–G6 review the sequential implementation phases. None is approved by the creation of this planning pack.
