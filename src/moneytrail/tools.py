@@ -1,6 +1,7 @@
 """Deterministic financial reconciliation and order record inspection tools for MoneyTrail."""
 
 import json
+import re
 import uuid
 import zoneinfo
 from datetime import date, datetime, timedelta
