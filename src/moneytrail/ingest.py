@@ -289,7 +289,9 @@ def validate_bundle(bundle_path: Path) -> dict[str, Any]:
             raise ValueError("Bundle must contain at least one correspondence file")
 
         # Verify checksums and size limits of every file
-        file_bytes_map: dict[str, bytes] = {}
+        file_bytes_map: dict[str, bytes] = {
+            "manifest.json": manifest_raw.encode("utf-8")
+        }
         for entry in manifest.files:
             p = entry.path.strip("/")
             data = zf.read(p)

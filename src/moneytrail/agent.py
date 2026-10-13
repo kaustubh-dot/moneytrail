@@ -577,7 +577,7 @@ def assemble_context(
     if conflicts:
         pol_names = []
         for c in conflicts:
-            pols = c.get("details", {}).get("policies", [])
+            pols = c.get("policies", []) or c.get("details", {}).get("policies", [])
             for p in pols:
                 if isinstance(p, dict) and "policy_id" in p:
                     pol_names.append(p["policy_id"])
