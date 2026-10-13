@@ -4,11 +4,11 @@ Updated 2026-10-13. Current state: documentation-only planning pack. Application
 
 [PRD.md](PRD.md) owns vision; [ARCHITECTURE.md](ARCHITECTURE.md) owns contracts; [EVALUATION.md](EVALUATION.md) owns verification; [ROADMAP.md](ROADMAP.md) owns exact ordered instructions. This file is the sole canonical checkbox/status/approval ledger.
 
-## Current position and next action
+### Current position and next action
 
-Current phase: **Phase 3 — Hybrid retrieval and richer evidence access**. Exact next task: **MT3.1 — Fuse exact vector/full-text retrieval and rerank evidence**. Batch implementation authorization recorded.
+Current phase: **Phase 5 — Freeze, compare, and judge results**. Exact next task: **MT5.1 — Finalize scoring/gold and freeze evaluated inputs**. Batch implementation authorization recorded.
 
-Phase 2 completed and accepted via automated review-and-fix gate G2 (candidate 807e9b3, verdict PASS). Phase 3 ready to commence.
+Phase 4 completed and accepted via automated review-and-fix gate G4 (candidate 1adcd85, verdict PASS). Phase 5 ready to commence.
 
 ## Canonical task list
 
@@ -42,10 +42,10 @@ A checkbox means the deliverable and minimal verification passed and evidence wa
 
 ### Phase 4 — Bounded investigator, controls, and trace
 
-- [ ] **MT4.1** Add the explicit bounded LangGraph investigator. PRD: MT-04, MT-06, MT-08. Depends on G3 approval.
-- [ ] **MT4.2** Enforce actual context/tool/model/time budgets. PRD: MT-08, MT-09, MT-13. Depends on MT4.1.
-- [ ] **MT4.3** Complete cancellation, errors, and source boundaries. PRD: MT-08, MT-10, MT-11, MT-14. Depends on MT4.2.
-- [ ] **MT4.4** Complete local trace/UI and development quality review. PRD: MT-06, MT-10, MT-12, MT-14. Depends on MT4.3.
+- [x] **MT4.1** Add the explicit bounded LangGraph investigator. PRD: MT-04, MT-06, MT-08. Depends on G3 approval.
+- [x] **MT4.2** Enforce actual context/tool/model/time budgets. PRD: MT-08, MT-09, MT-13. Depends on MT4.1.
+- [x] **MT4.3** Complete cancellation, errors, and source boundaries. PRD: MT-08, MT-10, MT-11, MT-14. Depends on MT4.2.
+- [x] **MT4.4** Complete local trace/UI and development quality review. PRD: MT-06, MT-10, MT-12, MT-14. Depends on MT4.3.
 
 ### Phase 5 — Freeze, compare, and judge results
 
@@ -67,7 +67,7 @@ A checkbox means the deliverable and minimal verification passed and evidence wa
 | G1 | Atomic actual import, duplicates, source locators, authenticated scoped API/read-only role | Passed (candidate 8286e98; independent reviewer PASS; atomic rollback verified, duplicate locators, PDF/CSV/text provenance, constant-time auth, reader write denied, 6/6 tests pass) | Approved via user batch authorization (2026-10-13) |
 | G2 | Live uploaded case → original question → exact totals/explanation → CSV/PDF/text citations | Passed (candidate 807e9b3; independent reviewer PASS; 26/26 tests pass, 12/12 dev eval cases grounded, static UI built and served, pure integer paise accounting verified) | Approved via user batch authorization (2026-10-13) |
 | G3 | Hybrid retrieval/read tools and fixed development baseline | Passed (candidate dec3bc4, hardened in 92c00de; independent reviewer PASS; 28/28 tests pass, candidate recall @ 20: 1.0000, final doc recall @ 6: 1.0000, 12 dev fixed cases captured, typed dispatcher verified) | Approved via user batch authorization (2026-10-13) |
-| G4 | Bounded investigator, context, cancel/error/security/trace behavior, development review | Pending | Not recorded |
+| G4 | Bounded investigator, context, cancel/error/security/trace behavior, development review | Passed (candidate 1adcd85; independent reviewer PASS; explicit LangGraph graph with recursion_limit=16, 19/19 run-control/answer tests pass, 39/39 full suite pass, context accounting/near-budget pilot passed in evals/reports/phase4-context.json, 12 agent dev cases in evals/reports/dev_agent.jsonl, frontend built cleanly) | Approved via user batch authorization (2026-10-13) |
 | G5 | Frozen paired evaluation, monetary/security/outcome/retrieval gates, complete error report | Pending | Not recorded |
 | G6 | Clean-clone live demo, actual CI result, accurate docs/interview handoff, final PRD review | Pending | Not recorded |
 
@@ -75,6 +75,7 @@ Implementation-start authorization: **Recorded (explicit batch authorization for
 
 ## Verification and checkpoint ledger
  
+- **Phase 4 Gate G4 (2026-10-14)**: Independent review-and-fix subagent completed evaluation of candidate commit `1adcd85` on `implementation/build`. Verified explicit LangGraph investigation graph (`AgentRunner` with `bootstrap`, `decide`, `tools`, `validate`, `finish` nodes and recursion backstop `recursion_limit=16`), deterministic integer paise reconciliation bootstrap (counting as 1 of 6 tools with case ID injection), at most 2 sequential tool dispatches per decision turn, 4th model turn mandatory answer enforcement (`BUDGET_EXHAUSTED` termination upon attempted continuation), exact context budgeting with pinned Qwen tokenizer and schema overhead calculation (`CONTEXT_LIMIT` overflow guard), 60s per-model call / 240s monotonic run deadline enforcement, graceful fallback to `insufficient` upon exhausted validation attempts, cancellation propagation with immediate abort and run state update, FastAPI lifespan recovery for interrupted runs, pilot probes report (`evals/reports/phase4-context.json`: 10/10 probes passed, near-budget ~6,000 token probe passed in 8.3s, offline provider returned `MODEL_UNAVAILABLE`), 12 live development baseline cases executed in agent mode (`evals/reports/dev_agent.jsonl`), frontend typecheck and static production build (built in 299ms), and full regression test suite (all 39 tests passed). Subagent returned verdict PASS with 0 defects. Phase 4 accepted under user batch implementation authorization. Git checkpoint: `feat: bound and trace the merchant investigation agent`. Next action: MT5.1.
 - **Phase 3 Gate G3 (2026-10-14)**: Independent review-and-fix subagent completed evaluation of candidate commit `dec3bc4` (hardened in `92c00de`) on `implementation/build`. Verified exact dense cosine candidates, PostgreSQL full-text candidates, Reciprocal Rank Fusion (`fuse_rrf` with constant 60 and stable tie-breaking), Cross-Encoder reranking (`rerank_candidates`), deterministic candidate/locator regression (`test_retrieval.py` passed without model downloads), real model standalone evaluation across dev split (`candidate recall @ 20`: 1.0000 >= 0.95 gate, `final doc recall @ 6`: 1.0000 >= 0.90 gate, zero-denominator safeguards), typed evidence dispatcher `dispatch_tool` across 5 tools with case injection and `RESULT_LIMIT` bounds, 12 fixed-mode development baseline cases (`evals/reports/dev_fixed.jsonl`), and frontend build (passed in 290ms). Subagent confirmed 28/28 tests passed and returned verdict PASS. Phase 3 accepted under user batch implementation authorization. Git checkpoint: `feat: retrieve and rerank policy and correspondence evidence`. Next action: MT4.1.
 - **MT3.3 (2026-10-14)**: Executed live fixed baseline across 12 development cases using hybrid retrieval (`python -m moneytrail.evaluation run --split dev --mode fixed` -> saved to `evals/reports/dev_fixed.jsonl`). Verified 0 ungrounded currency hallucinations, successful reflection loop recovery, and safe handling of adversarial and missing link cases. Ran standalone retrieval evaluation (`python -m moneytrail.evaluation retrieval --split dev`): candidate recall @ 20 is 1.0000 (13/13, gate >= 0.95), final doc recall @ 6 is 1.0000 (13/13, gate >= 0.90), retrieval gate PASS. Updated EVALUATION.md measured development baseline reference. Next action: Phase 3 Review and Gate G3.
 - **MT3.2 (2026-10-14)**: Implemented typed evidence dispatcher `dispatch_tool` in `src/moneytrail/tools.py` mapping discriminated `ToolCall` variants (`reconcile`, `inspect_order`, `select_policy`, `search_evidence`, `read_source`) to ordinary functions with case scope injection, safe call IDs, elapsed time tracking, and explicit overflow rejection (`RESULT_LIMIT` for >100 related records in `inspect_order` and >20 order IDs in `select_policy`). Added `test_dispatch_tool` in `tests/test_accounting.py` covering all 5 tool variants, unknown tool rejection (`UNKNOWN_TOOL`), and argument validation. Verified frontend build (`npm --prefix frontend run build` passed in 296ms) and regression suite (`pytest tests/test_security.py tests/test_accounting.py tests/test_workflow.py -q` passed 11/11, full suite passed 28/28). Next action: MT3.3 — Record fixed development baseline and retrieval findings.
