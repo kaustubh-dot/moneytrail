@@ -6,9 +6,9 @@ Updated 2026-10-13. Current state: documentation-only planning pack. Application
 
 ### Current position and next action
 
-Current phase: **Phase 5 — Freeze, compare, and judge results**. Exact next task: **MT5.1 — Finalize scoring/gold and freeze evaluated inputs**. Batch implementation authorization recorded.
+Current phase: **Phase 5 — Freeze, compare, and judge results**. Exact next task: **MT5.2 — Run paired held-out and retrieval evaluations**. Batch implementation authorization recorded.
 
-Phase 4 completed and accepted via automated review-and-fix gate G4 (candidate 1adcd85, verdict PASS). Phase 5 ready to commence.
+Phase 4 completed and accepted via automated review-and-fix gate G4 (candidate 1adcd85, verdict PASS). MT5.1 completed.
 
 ## Canonical task list
 
@@ -49,7 +49,7 @@ A checkbox means the deliverable and minimal verification passed and evidence wa
 
 ### Phase 5 — Freeze, compare, and judge results
 
-- [ ] **MT5.1** Finalize scoring/gold and freeze evaluated inputs. PRD: MT-03, MT-05, MT-06, MT-11, MT-12. Depends on G4 approval.
+- [x] **MT5.1** Finalize scoring/gold and freeze evaluated inputs. PRD: MT-03, MT-05, MT-06, MT-11, MT-12. Depends on G4 approval.
 - [ ] **MT5.2** Run paired held-out and retrieval evaluations. PRD: MT-05, MT-06, MT-08, MT-12, MT-13, MT-14. Depends on MT5.1.
 - [ ] **MT5.3** Publish all errors and the acceptance decision. PRD: MT-03, MT-06, MT-11, MT-12, MT-16. Depends on MT5.2.
 
@@ -74,6 +74,8 @@ A checkbox means the deliverable and minimal verification passed and evidence wa
 Implementation-start authorization: **Recorded (explicit batch authorization for Phases 0 through 6 in order with per-phase review-and-fix gate; 2026-10-13)**. Planning/repository authorization does not authorize application phases. Record actual user approval scope/date at each gate; never treat silence, a passing test, or a commit as approval. A user's explicit batch authorization of named phases may be recorded, but must not be inferred.
 
 ## Verification and checkpoint ledger
+
+- **MT5.1 (2026-10-14)**: Validated 12 dev and 18 test cases with enhanced schema and zip provenance checks (`uv run python -m moneytrail.evaluation validate --split dev` and `--split test`). Implemented 5-dimension deterministic scoring (`score_case`), dirty tree rejection (`check_working_tree_clean`), freeze manifest generator (`create_freeze_manifest`), freeze validator (`validate_freeze`), and 10 unit tests in `tests/test_evaluation.py` (all passing). Generated canonical freeze manifest at `evals/reports/freeze.json` recording commit `2e20e817cb56ae376933ef2a3540f7aad8ae781e`, package lock hashes, dataset hashes (12 dev + 18 test + demo), schema/prompt hashes, hardware, and configuration. Next action: MT5.2 — Run paired held-out and retrieval evaluations.
  
 - **Phase 4 Gate G4 (2026-10-14)**: Independent review-and-fix subagent completed evaluation of candidate commit `1adcd85` on `implementation/build`. Verified explicit LangGraph investigation graph (`AgentRunner` with `bootstrap`, `decide`, `tools`, `validate`, `finish` nodes and recursion backstop `recursion_limit=16`), deterministic integer paise reconciliation bootstrap (counting as 1 of 6 tools with case ID injection), at most 2 sequential tool dispatches per decision turn, 4th model turn mandatory answer enforcement (`BUDGET_EXHAUSTED` termination upon attempted continuation), exact context budgeting with pinned Qwen tokenizer and schema overhead calculation (`CONTEXT_LIMIT` overflow guard), 60s per-model call / 240s monotonic run deadline enforcement, graceful fallback to `insufficient` upon exhausted validation attempts, cancellation propagation with immediate abort and run state update, FastAPI lifespan recovery for interrupted runs, pilot probes report (`evals/reports/phase4-context.json`: 10/10 probes passed, near-budget ~6,000 token probe passed in 8.3s, offline provider returned `MODEL_UNAVAILABLE`), 12 live development baseline cases executed in agent mode (`evals/reports/dev_agent.jsonl`), frontend typecheck and static production build (built in 299ms), and full regression test suite (all 39 tests passed). Subagent returned verdict PASS with 0 defects. Phase 4 accepted under user batch implementation authorization. Git checkpoint: `feat: bound and trace the merchant investigation agent`. Next action: MT5.1.
 - **Phase 3 Gate G3 (2026-10-14)**: Independent review-and-fix subagent completed evaluation of candidate commit `dec3bc4` (hardened in `92c00de`) on `implementation/build`. Verified exact dense cosine candidates, PostgreSQL full-text candidates, Reciprocal Rank Fusion (`fuse_rrf` with constant 60 and stable tie-breaking), Cross-Encoder reranking (`rerank_candidates`), deterministic candidate/locator regression (`test_retrieval.py` passed without model downloads), real model standalone evaluation across dev split (`candidate recall @ 20`: 1.0000 >= 0.95 gate, `final doc recall @ 6`: 1.0000 >= 0.90 gate, zero-denominator safeguards), typed evidence dispatcher `dispatch_tool` across 5 tools with case injection and `RESULT_LIMIT` bounds, 12 fixed-mode development baseline cases (`evals/reports/dev_fixed.jsonl`), and frontend build (passed in 290ms). Subagent confirmed 28/28 tests passed and returned verdict PASS. Phase 3 accepted under user batch implementation authorization. Git checkpoint: `feat: retrieve and rerank policy and correspondence evidence`. Next action: MT4.1.

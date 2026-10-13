@@ -1,0 +1,88 @@
+{
+  "freeze_version": 1,
+  "commit_hash": "2e20e817cb56ae376933ef2a3540f7aad8ae781e",
+  "branch": "implementation/build",
+  "created_at": "2026-10-14T02:31:01.266241",
+  "working_tree_clean": true,
+  "dependency_locks": {
+    "pyproject_toml": "2f30106bc8a5d8f4e3925c0154f14ed338e4b5789d5bf1a871f397eb8526463d",
+    "uv_lock": "d191c083976af56cfe0ef0ce36e9461841661b78f6f10ab4acbdca9d9c6c42db",
+    "package_json": "84a220b69317c58c4d0b4ecd9fa3aa5541d5c0af7b90e6ac0cea882c0c989b42",
+    "package_lock_json": "c9b7f869408d5f09edee4cb981e980567da649e0803a2d956ac865d11eceb7c6"
+  },
+  "pinned_revisions": {
+    "model": "qwen3:8b",
+    "model_digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+    "tokenizer": "Qwen/Qwen2.5-7B-Instruct@b968826d9c46dd6066d109eabc6255188de91218",
+    "embedding": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+    "reranker": "cross-encoder/ms-marco-MiniLM-L6-v2@233902d25c440f23af6f7d6e94d2946bac0bee0a"
+  },
+  "prompts_and_schemas": {
+    "decision_schema_sha256": "e61ad6ab799bec43f5dea67635daf115dc0ebfcef28d3f0bec3969217f2710f9",
+    "investigation_result_schema_sha256": "bd043d33bc7fe2f2399b7aabee7a13e74298cbe328818842a33c88da81a68924",
+    "system_prompt_sha256": "14e2aa741d0e98d7ce41ac63fab98dbe07c69202ae11a6ae641389cc7a836572"
+  },
+  "datasets": {
+    "demo": {
+      "path": "fixtures/demo.zip",
+      "sha256": "63c90850dbd3f10e2f001799748d96b9815a9a0fe008f9705e8e744f41250dff"
+    },
+    "dev": {
+      "questions_sha256": "4df5bd6363f7b66f2e21cc001ac203809ea309a3917d3d33955a8c72cb830903",
+      "case_count": 12,
+      "bundle_hashes": {
+        "dev-a1": "dedcc5c742c84bfa5c74f1fa4e5673f221e99cfb039ee8ad8e29518a464af528",
+        "dev-a2": "c7a5d5a190dde9d3c5b36ecba97aa33c450f53f4a9b13aa2e7112ee40a2ed290",
+        "dev-a3": "803076af1c40c2d98345d313619c24561cac4729a4263631a27272de16dcf31a",
+        "dev-a4": "53e358fe6db1b57f9c4239f871dbe7dad5a3afb96aaae17bdfebf23a1c5cf97c",
+        "dev-b1": "7e174063dae15a297d86780a1a609c0b60b5acd46dfedf6899bf6672d42c56a2",
+        "dev-b2": "9b515e8f719a5510a07ac7812849dcdb676cb299e53efcd51a63b7a6197baa11",
+        "dev-b3": "a30b54bd823b8cf83e7dadc1170b08d1367f01ce7d14472f03bb7d37a1853f07",
+        "dev-b4": "4332dadef734b7b0ac1839bc0670e6f8c7d68375dc1a35ad9534cdcdc6f5fd7f",
+        "dev-c1": "3767179c7c2bacc6612866d6a4a5ffc8d8324345641a684bb79e5f90bb0d007c",
+        "dev-c2": "ab4775efb92fa6eb415d9061265ccc927f06a38a53e7f32bcd8c8830fba9ad95",
+        "dev-c3": "258027fa6b87dd07097ce66c381636f03b1264c362acfaf59f18baf5e02a268b",
+        "dev-c4": "1bcbe70517aff48e9922b1dd48ce0f5149e504ea7df596899052ab82c384794a"
+      }
+    },
+    "test": {
+      "questions_sha256": "0fd139f7a5f52ce4938e675806dfd2dabd5a1821135dd2c6c98daf1d2339f948",
+      "case_count": 18,
+      "bundle_hashes": {
+        "test-a1": "58598c5e8138cbb60e30796e35e0fbbe7f20a819a938e0ceab1b978b8166bd75",
+        "test-a2": "4ec1e427afcf576fe89d32cf6c76e4aa0ddb513cf9ba10d28d6f83cbd51b74a9",
+        "test-a3": "b97e75d9be04128680b240dd2219ca11145d09c4bb15b41751d03f1d13f30d90",
+        "test-a4": "b73a562b33cd55500f2e01331da22b512d00ca471bddcace8ad195e1a3b86ac5",
+        "test-a5": "09e2b7f28ad0ed7bee77dfe58be1eec52bc363044b37f94d0f20fc233176f660",
+        "test-a6": "855532c01e4c5ee9e508fa1d55d0a5470bcf8d23d7453ffa40af0d9652c71039",
+        "test-b1": "57493c96414b5cb0ed49b59589a20b438c441322cee3a3c0d5c9616409f2fdef",
+        "test-b2": "da34e9228ccd241a05142c4a8ecc34d082935006aeca3903fe98a8f0ae83d5eb",
+        "test-b3": "447afc3a9a034d3e70684694ea2f6795d5bbc2e243f84096a4e3c9e354300df6",
+        "test-b4": "f7d56e382c8b5a86f79ceeb6395a1587122a31feea78dea15accfffe1244dbbe",
+        "test-b5": "a42f5b96cc403b838a552e5cc7b6316ebd9691c7e9e20b262e42caecf6592ef3",
+        "test-b6": "bd82c5bd2578b75adc736612c9896c4e08697b8f0a9e6d727ae7cd473b15a38a",
+        "test-c1": "5ee324aac5d59c4790898dc2f55e9f78a134223cf18a189509a0f0dbdcf3a76a",
+        "test-c2": "a2cb3d3fc532412c901f590fc99e4503fbaafdc06497cdefa13d72230737c663",
+        "test-c3": "7162ff69257ca972856c7e764e041f8bcfc7622496a258e00ca2bd490043105d",
+        "test-c4": "869c6d879cc7856eda0bcd4a49c0ada4cb7afa0b135b528f8caab6c14007cc21",
+        "test-c5": "a1946d948c8f9e69bb895f223bfc1991113755ad2a48deba2c9c5bda19430adf",
+        "test-c6": "f683a0c8846d70d75a43c2818e684eabc12cd4144fff3b828a8ed2b1d595f0ee"
+      }
+    }
+  },
+  "config": {
+    "context_window": 8192,
+    "max_tool_calls": 6,
+    "max_model_turns": 4,
+    "model_timeout_seconds": 60,
+    "run_timeout_seconds": 240,
+    "currency": "INR"
+  },
+  "hardware": {
+    "platform": "Linux-6.17.0-1032-oem-x86_64-with-glibc2.39",
+    "python_version": "3.12.3",
+    "cpu": "Intel(R) Core(TM) Ultra 9 285",
+    "ram": "131313820 kB",
+    "ollama_version": "ollama version is 0.40.3"
+  }
+}
