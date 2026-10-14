@@ -227,7 +227,12 @@ async def test_live_fixed_demo_investigation(test_settings: Settings):
     )
     run_id = uuid.uuid4()
 
-    inv_result = await run_fixed(req, run_id, test_settings)
+    try:
+        inv_result = await run_fixed(req, run_id, test_settings)
+    except LLMError as e:
+        if e.code in ("MODEL_UNAVAILABLE", "READ_TIMEOUT", "CONNECT_ERROR"):
+            pytest.skip(f"Local Ollama provider unavailable or timed out ({e}); skipping live test in offline test suite")
+        raise
     assert inv_result.run_id == run_id
     assert inv_result.case_id == case_id
     assert inv_result.outcome in ("explained", "partial")

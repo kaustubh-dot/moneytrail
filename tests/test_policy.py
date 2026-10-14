@@ -196,3 +196,44 @@ async def test_order_limit_and_missing_order_errors(test_settings: Settings):
             await select_policy(case_id, ["O-NONEXISTENT"], reader_conn)
     finally:
         await reader_conn.close()
+
+
+@pytest.mark.asyncio
+async def test_policy_same_date_exclusive_boundary(test_settings: Settings):
+    """
+    test-a5 tests the same-date boundary transition:
+    - POL-EARLY effective 2026-09-01 to 2026-09-15
+    - POL-LATE effective 2026-09-15 to open
+    - Order O-TA5-1 captured on 2026-09-15T09:00:00+05:30
+    Under half-open contract effective_from <= captured_date < effective_to,
+    POL-EARLY is excluded on 2026-09-15, and POL-LATE is uniquely selected.
+    """
+    test_a5_zip = Path("evals/test/bundles/test-a5.zip")
+    assert test_a5_zip.exists()
+
+    res = await import_bundle(test_a5_zip, test_settings)
+    case_id = res.case_id
+
+    reader_conn = await get_reader_connection(test_settings)
+    try:
+        evidence = await select_policy(case_id, ["O-TA5-1"], reader_conn)
+        assert len(evidence.applicable_policies) == 1
+        pol = evidence.applicable_policies[0]
+        assert pol["policy_id"] == "POL-LATE"
+        assert pol["fee_bps"] == 250
+        assert pol["calendar_days"] == 3
+        assert len(evidence.conflicting_policies) == 0
+
+        facts_by_id = {f.fact_id: f for f in evidence.facts}
+        # Gross 8,000,000 paise * 250 bps / 10,000 = 200,000 paise
+        assert facts_by_id["fact_O-TA5-1_expected_fee"].value_paise == 200000
+        # Expected date: Sep 15 + 3 calendar days = Sep 18 (2026-09-18)
+        assert facts_by_id["fact_O-TA5-1_expected_settlement_date"].value == "2026-09-18"
+
+        # Citation should be for POL-LATE
+        labels = [c.label for c in evidence.citations]
+        assert any("POL-LATE" in l for l in labels)
+        assert not any("POL-EARLY" in l for l in labels)
+    finally:
+        await reader_conn.close()
+

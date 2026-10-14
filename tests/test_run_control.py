@@ -439,3 +439,96 @@ async def test_transient_read_retry(test_settings: Settings):
             # 1 reconcile + 1 failed read + 1 retry read = 3 tool calls used
             assert result.budget_summary.get("tool_calls_used") == 3
             assert call_count == 2
+
+
+def test_invalid_citation_locator_rejected_without_rewriting():
+    """
+    F-007 regression test:
+    Verify validate_citations rejects invalid locators strictly by raising ValueError,
+    and does NOT silently rewrite them to matching_locs[0].
+    """
+    from moneytrail.agent import validate_citations
+
+    src_id = uuid.uuid4()
+    valid_citations = {(src_id, "csv:r1"), (src_id, "csv:r2")}
+
+    # Valid citation passes
+    valid_cit = Citation(source_id=src_id, locator_id="csv:r1", label="Valid Citation")
+    validate_citations([valid_cit], valid_citations)
+    assert valid_cit.locator_id == "csv:r1"
+
+    # Citation with invalid locator for known source must raise ValueError and NOT be rewritten
+    invalid_cit = Citation(source_id=src_id, locator_id="csv:r999", label="Invalid Citation")
+    with pytest.raises(ValueError, match="Invalid or cross-case citation locator"):
+        validate_citations([invalid_cit], valid_citations)
+
+    # Must not have been rewritten to csv:r1
+    assert invalid_cit.locator_id == "csv:r999"
+
+
+@pytest.mark.asyncio
+async def test_fatal_tool_execution_error_propagates(test_settings: Settings):
+    """
+    F-005 regression test:
+    Verify fatal tool execution error (e.g. database disconnect) raises
+    LLMError('TOOL_EXECUTION_FAILED') instead of being silently ignored.
+    """
+    demo_zip = Path("fixtures/demo.zip")
+    res = await import_bundle(demo_zip, test_settings)
+    case_id = res.case_id
+
+    req = InvestigationRequest(case_id=case_id, question="What about order O-001?")
+    run_id = uuid.uuid4()
+
+    turn1_decision = Decision(
+        action="tools",
+        calls=[ToolCall(action="inspect_order", order_id="O-001")],
+    )
+
+    import psycopg
+    with patch("moneytrail.agent.complete_structured", new_callable=AsyncMock) as mock_complete:
+        mock_complete.return_value = turn1_decision
+        with patch("moneytrail.agent.dispatch_tool", side_effect=psycopg.OperationalError("Database connection lost")):
+            with pytest.raises(LLMError) as exc_info:
+                await run_agent(req, run_id, test_settings)
+
+            assert exc_info.value.code == "TOOL_EXECUTION_FAILED"
+
+
+@pytest.mark.asyncio
+async def test_exhausted_validation_turns_raises_validation_failed(test_settings: Settings):
+    """
+    F-005 regression test:
+    Verify that when model turns are exhausted by repeated invalid answer drafts,
+    LLMError('VALIDATION_FAILED') is raised instead of falling back to outcome='insufficient'.
+    """
+    demo_zip = Path("fixtures/demo.zip")
+    res = await import_bundle(demo_zip, test_settings)
+    case_id = res.case_id
+
+    req = InvestigationRequest(case_id=case_id, question="What are the gross sales?")
+    run_id = uuid.uuid4()
+
+    # Draft with hallucinated fact ID that fails validate_result
+    bad_draft = AnswerDraft(
+        outcome="explained",
+        claims=[
+            Claim(
+                text_template="Gross sales totaled {{fact:fact_nonexistent}}.",
+                fact_ids=["fact_nonexistent"],
+                citations=[],
+            )
+        ],
+        selected_fact_ids=["fact_nonexistent"],
+        unresolved=[],
+    )
+    bad_decision = Decision(action="answer", answer=bad_draft)
+
+    with patch("moneytrail.agent.complete_structured", new_callable=AsyncMock) as mock_complete:
+        mock_complete.return_value = bad_decision
+
+        with pytest.raises(LLMError) as exc_info:
+            await run_agent(req, run_id, test_settings)
+
+        assert exc_info.value.code == "VALIDATION_FAILED"
+

@@ -382,11 +382,32 @@ async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any
 
     # 3. Near-budget context probe (~6,000 tokens)
     print("Running near-budget context probe (~6,000 input tokens)...")
-    # Assemble ~6,000 token synthetic context block
-    dummy_text_block = (
+    # Assemble ~6,000 token synthetic context block measured using tokenizer
+    tok = None
+    try:
+        from moneytrail.agent import count_tokens, get_tokenizer
+        tok = get_tokenizer(settings)
+    except Exception as e:
+        logger.warning(f"Could not load tokenizer for near-budget probe: {e}")
+
+    pattern = (
         "Order transaction record O-00100: captured_at=2026-09-25T10:00:00+05:30 gross=8000000 paise fee=200000 paise net=7800000 paise status=paid. "
         "Policy metadata: Published-At: 2026-09-01T00:00:00+05:30 Effective-From: 2026-09-01 Settlement-Calendar-Days: 2 Processing-Fee-Bps: 250. "
-    ) * 75  # ~6,000 words / tokens
+    )
+    if tok is not None:
+        pattern_tokens = count_tokens(pattern, tok)
+        base_prompt = "Here is the context data:\n\nReconcile order O-00100."
+        base_tokens = count_tokens(SYSTEM_PROMPT + base_prompt, tok)
+        needed_tokens = max(1000, 6000 - base_tokens)
+        repeats = needed_tokens // max(1, pattern_tokens)
+        dummy_text_block = pattern * repeats
+        while count_tokens(SYSTEM_PROMPT + f"Here is the context data:\n{dummy_text_block}\nReconcile order O-00100.", tok) < 6000:
+            dummy_text_block += pattern
+        near_budget_tokens = count_tokens(SYSTEM_PROMPT + f"Here is the context data:\n{dummy_text_block}\nReconcile order O-00100.", tok)
+    else:
+        dummy_text_block = pattern * 75
+        near_budget_tokens = len(dummy_text_block.split())
+
     near_budget_messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": f"Here is the context data:\n{dummy_text_block}\nReconcile order O-00100."},
@@ -402,10 +423,11 @@ async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any
         )
         elapsed = time.perf_counter() - t0
         report["performance_probes"]["near_budget_latency_s"] = round(elapsed, 3)
-        report["performance_probes"]["near_budget_context_tokens"] = len(dummy_text_block.split())
+        report["performance_probes"]["near_budget_context_tokens"] = near_budget_tokens
         report["performance_probes"]["fits_in_8192_context"] = True
-        print(f"  Near-budget request passed in {round(elapsed, 3)}s")
+        print(f"  Near-budget request passed in {round(elapsed, 3)}s ({near_budget_tokens} tokens)")
     except Exception as e:
+        report["performance_probes"]["near_budget_context_tokens"] = near_budget_tokens
         report["performance_probes"]["fits_in_8192_context"] = False
         report["performance_probes"]["near_budget_error"] = str(e)
         print(f"  Near-budget request failed: {e}")

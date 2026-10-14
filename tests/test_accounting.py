@@ -344,3 +344,85 @@ async def test_dispatch_tool(test_settings: Settings):
 
     finally:
         await reader_conn.close()
+
+
+@pytest.mark.asyncio
+async def test_inspect_order_cutoff_and_post_cutoff_exclusion(test_settings: Settings):
+    """
+    F-002: Verify inspect_order respects snapshot cutoff as_of.
+    In test-b6, gross=5,000,000, fee=125,000 before cutoff.
+    Refund=1,000,000 is processed in October (post-cutoff).
+    Payout link=3,875,000 is recorded in October (post-cutoff).
+    Snapshot expected net must be 4,875,000 paise, received must be 0,
+    and post-cutoff records must be preserved as excluded with explicit reasons.
+    """
+    test_b6_zip = Path("evals/test/bundles/test-b6.zip")
+    assert test_b6_zip.exists()
+
+    res = await import_bundle(test_b6_zip, test_settings)
+    reader_conn = await get_reader_connection(test_settings)
+    try:
+        from moneytrail.tools import inspect_order
+        evidence = await inspect_order(res.case_id, "O-TB6-1", reader_conn)
+
+        assert evidence.gross_paise == 5000000
+        assert evidence.expected_net_paise == 4875000
+
+        # Facts
+        facts_by_id = {f.fact_id: f for f in evidence.facts}
+        assert facts_by_id["fact_O-TB6-1_gross"].value_paise == 5000000
+        assert facts_by_id["fact_O-TB6-1_refunds"].value_paise == 0
+        assert facts_by_id["fact_O-TB6-1_fees"].value_paise == 125000
+        assert facts_by_id["fact_O-TB6-1_net"].value_paise == 4875000
+        assert facts_by_id["fact_O-TB6-1_pending"].value_paise == 4875000
+        assert "fact_O-TB6-1_received" not in facts_by_id
+
+        # Post-cutoff records retained with explicit exclusion reasons
+        assert len(evidence.refunds) == 1
+        assert evidence.refunds[0]["included"] is False
+        assert "at or after as_of cutoff" in evidence.refunds[0]["excluded_reason"]
+
+        assert len(evidence.links) == 1
+        assert evidence.links[0]["included"] is False
+        assert "at or after as_of cutoff" in evidence.links[0]["excluded_reason"]
+    finally:
+        await reader_conn.close()
+
+
+@pytest.mark.asyncio
+async def test_incomplete_manifest_payouts_unknown_and_pending_unknown(test_settings: Settings, tmp_path: Path):
+    """
+    F-006: Verify partial-knowledge reconciliation does not crash (UnboundLocalError)
+    when payouts=unknown, and does not claim a definitive documented pending subtotal
+    when refund/fee evidence is incomplete.
+    """
+    demo_zip = Path("fixtures/demo.zip")
+    unpacked = tmp_path / "case_payouts_unknown"
+    with zipfile.ZipFile(demo_zip) as zf:
+        zf.extractall(unpacked)
+
+    manifest_data = json.loads((unpacked / "manifest.json").read_text(encoding="utf-8"))
+    manifest_data["case_key"] = "test-payouts-unknown"
+    manifest_data["completeness"]["payouts"] = "unknown"
+    manifest_data["completeness"]["refunds"] = "unknown"
+    (unpacked / "manifest.json").write_text(json.dumps(manifest_data), encoding="utf-8")
+
+    case_zip = tmp_path / "case_payouts_unknown.zip"
+    with zipfile.ZipFile(case_zip, "w") as zf:
+        for f in unpacked.rglob("*"):
+            if f.is_file():
+                zf.write(f, arcname=f.relative_to(unpacked).as_posix())
+
+    res = await import_bundle(case_zip, test_settings)
+    reader_conn = await get_reader_connection(test_settings)
+    try:
+        # 1. Does not crash with UnboundLocalError
+        rec = await reconcile(res.case_id, reader_conn)
+        assert rec.reconciled is False
+
+        # 2. Documented pending must not accumulate verified pending when refund evidence is unknown
+        assert rec.documented_pending_paise == 0
+        assert any(f.get("code") == "INCOMPLETE_PENDING_EVIDENCE" for f in rec.findings)
+    finally:
+        await reader_conn.close()
+

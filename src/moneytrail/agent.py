@@ -11,6 +11,7 @@ from typing import Any
 from uuid import UUID
 
 from langgraph.graph import StateGraph, START, END
+import psycopg
 from psycopg.rows import dict_row
 
 from moneytrail.config import Settings
@@ -140,13 +141,9 @@ def validate_citations(
             raise ValueError(f"Malformed locator ID: '{cit.locator_id}'")
         if valid_citations is not None and len(valid_citations) > 0:
             if (cit.source_id, cit.locator_id) not in valid_citations:
-                matching_locs = [c_loc for c_src, c_loc in valid_citations if c_src == cit.source_id]
-                if matching_locs:
-                    cit.locator_id = matching_locs[0]
-                else:
-                    raise ValueError(
-                        f"Invalid or cross-case citation: source_id={cit.source_id}, locator_id='{cit.locator_id}'"
-                    )
+                raise ValueError(
+                    f"Invalid or cross-case citation locator: source_id={cit.source_id}, locator_id='{cit.locator_id}'"
+                )
 
 
 def validate_result(
@@ -313,10 +310,22 @@ def get_tokenizer(settings: Settings):
     if _TOKENIZER is None:
         from transformers import AutoTokenizer
 
-        _TOKENIZER = AutoTokenizer.from_pretrained(
-            settings.tokenizer,
-            revision=settings.tokenizer_revision or None,
-        )
+        tokenizer_name = settings.tokenizer
+        revision = settings.tokenizer_revision or None
+        if revision and "@" in revision:
+            tokenizer_name, revision = revision.split("@", 1)
+
+        try:
+            _TOKENIZER = AutoTokenizer.from_pretrained(
+                tokenizer_name,
+                revision=revision,
+                local_files_only=True,
+            )
+        except Exception:
+            _TOKENIZER = AutoTokenizer.from_pretrained(
+                tokenizer_name,
+                revision=revision,
+            )
     return _TOKENIZER
 
 
@@ -716,11 +725,14 @@ async def run_fixed(
         cohort_end = case_row["cohort_end"]
         as_of = case_row["as_of"]
 
+        tool_calls_used = 0
+
         if cancel_event and cancel_event.is_set():
             raise asyncio.CancelledError()
 
         # 2. Tool turn 1: reconcile
         await emit("tool_started", {"tool": "reconcile"})
+        tool_calls_used += 1
         rec = await reconcile(request.case_id, reader_conn)
         await emit("tool_finished", {"tool": "reconcile", "reconciled": rec.reconciled})
 
@@ -729,6 +741,7 @@ async def run_fixed(
 
         # 3. Tool turn 2: select_policy (whole cohort)
         await emit("tool_started", {"tool": "select_policy", "order_ids": None})
+        tool_calls_used += 1
         pol_ev = await select_policy(request.case_id, None, reader_conn)
         await emit(
             "tool_finished",
@@ -748,11 +761,13 @@ async def run_fixed(
         for oid in explicit_order_ids[:2]:
             try:
                 await emit("tool_started", {"tool": "inspect_order", "order_id": oid})
+                tool_calls_used += 1
                 o_ev = await inspect_order(request.case_id, oid, reader_conn)
                 order_evidences.append(o_ev)
                 await emit("tool_finished", {"tool": "inspect_order", "order_id": oid})
 
                 # Also select policy for this explicit order
+                tool_calls_used += 1
                 o_pol = await select_policy(request.case_id, [oid], reader_conn)
                 pol_ev.facts.extend(o_pol.facts)
                 pol_ev.citations.extend(o_pol.citations)
@@ -764,6 +779,7 @@ async def run_fixed(
 
         # 5. Tool turn 3: search correspondence evidence
         await emit("tool_started", {"tool": "search_evidence", "query": request.question, "kind": "correspondence"})
+        tool_calls_used += 1
         search_res = await search_evidence(
             request.case_id,
             request.question,
@@ -897,26 +913,21 @@ async def run_fixed(
                         )
                     )
                 else:
-                    # Graceful degradation to insufficient outcome on persistent validation failure
-                    fallback_draft = AnswerDraft(
-                        outcome="insufficient",
-                        claims=[
-                            Claim(
-                                text_template="Investigation produced unvalidated claims that could not be verified against records.",
-                                fact_ids=[],
-                                citations=[],
-                            )
-                        ],
-                        selected_fact_ids=[],
-                        unresolved=[
-                            EvidenceGap(code="VALIDATION_FAILED", needed_evidence=str(ve))
-                        ],
+                    raise LLMError(
+                        "VALIDATION_FAILED",
+                        f"Answer validation failed in fixed synthesis after {turn} turns: {ve}",
+                        details={"turns_used": turn, "error": str(ve)},
                     )
-                    result = validate_result(fallback_draft, state)
-                    break
 
         if result is None:
             raise LLMError("MODEL_SCHEMA", "Failed to obtain validated investigation result")
+
+        result.budget_summary = {
+            "tool_calls_used": tool_calls_used,
+            "max_tool_calls": settings.max_tool_calls,
+            "model_turns_used": turn,
+            "max_model_turns": settings.max_model_turns,
+        }
 
         await emit("run_finished", {"outcome": result.outcome, "claims_count": len(result.claims)})
         return result
@@ -1114,8 +1125,21 @@ class AgentRunner:
                     retries_used += 1
                     tool_calls_used += 1
                     await self.emit("retry", {"tool": "read_source", "reason": str(e)})
-                    tool_res = await dispatch_tool(state.case_id, call, self.settings, db=self.reader_conn)
-                else:
+                    try:
+                        tool_res = await dispatch_tool(state.case_id, call, self.settings, db=self.reader_conn)
+                    except Exception as retry_err:
+                        e = retry_err
+
+                if tool_res is None:
+                    # Distinguish domain validation errors (KeyError, ValueError from bad arguments) from operational/system errors
+                    if isinstance(e, (psycopg.Error, ConnectionError, OSError, MemoryError)) or not isinstance(e, (KeyError, ValueError)):
+                        await self.emit("tool_error", {"tool": call.action, "error": str(e), "fatal": True})
+                        raise LLMError(
+                            "TOOL_EXECUTION_FAILED",
+                            f"Fatal operational error executing tool '{call.action}': {e}",
+                            details={"tool": call.action, "args": safe_args, "error": str(e)},
+                        ) from e
+
                     await self.emit("tool_error", {"tool": call.action, "error": str(e)})
                     tool_history.append({
                         "tool": call.action,
@@ -1222,21 +1246,11 @@ class AgentRunner:
             if state.model_turns_used < self.settings.max_model_turns:
                 return {"validation_error": str(ve), "phase": "decide"}
             else:
-                # Turns exhausted, graceful fallback to insufficient
-                fallback_draft = AnswerDraft(
-                    outcome="insufficient",
-                    claims=[
-                        Claim(
-                            text_template="Investigation produced unvalidated claims that could not be verified against records.",
-                            fact_ids=[],
-                            citations=[],
-                        )
-                    ],
-                    selected_fact_ids=[],
-                    unresolved=[EvidenceGap(code="VALIDATION_FAILED", needed_evidence=str(ve))],
+                raise LLMError(
+                    "VALIDATION_FAILED",
+                    f"Answer validation failed after {state.model_turns_used} turns: {ve}",
+                    details={"turns_used": state.model_turns_used, "error": str(ve)},
                 )
-                result = validate_result(fallback_draft, state)
-                return {"result": result, "phase": "finish"}
 
     async def finish_node(self, state: InvestigationState) -> dict[str, Any]:
         if self.cancel_event and self.cancel_event.is_set():

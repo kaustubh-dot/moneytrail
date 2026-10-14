@@ -188,35 +188,77 @@ export const InvestigationPanel: React.FC<InvestigationPanelProps> = ({
               </div>
               <div className="recon-grid">
                 <div className="recon-item">
-                  <div className="recon-label">Gross Sales</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                    <div className="recon-label">Gross Sales</div>
+                    {recon.gross_complete === false && (
+                      <span className="badge badge-amber" style={{ fontSize: '10px', padding: '1px 5px' }}>
+                        Known records only
+                      </span>
+                    )}
+                  </div>
                   <div className="recon-value">{formatPaiseAmount(recon.gross_paise)}</div>
                 </div>
                 <div className="recon-item">
-                  <div className="recon-label">Completed Refunds</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                    <div className="recon-label">Completed Refunds</div>
+                    {recon.refunds_complete === false && (
+                      <span className="badge badge-amber" style={{ fontSize: '10px', padding: '1px 5px' }}>
+                        Known records only
+                      </span>
+                    )}
+                  </div>
                   <div className="recon-value" style={{ color: 'var(--status-amber)' }}>
                     -{formatPaiseAmount(recon.completed_refunds_paise)}
                   </div>
                 </div>
                 <div className="recon-item">
-                  <div className="recon-label">Assessed Fees</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                    <div className="recon-label">Assessed Fees</div>
+                    {recon.fees_complete === false && (
+                      <span className="badge badge-amber" style={{ fontSize: '10px', padding: '1px 5px' }}>
+                        Known records only
+                      </span>
+                    )}
+                  </div>
                   <div className="recon-value" style={{ color: 'var(--status-amber)' }}>
                     -{formatPaiseAmount(recon.assessed_fees_paise)}
                   </div>
                 </div>
                 <div className="recon-item">
-                  <div className="recon-label">Expected Net</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                    <div className="recon-label">Expected Net</div>
+                    {(recon.gross_complete === false || recon.refunds_complete === false || recon.fees_complete === false) && (
+                      <span className="badge badge-amber" style={{ fontSize: '10px', padding: '1px 5px' }}>
+                        Known records only
+                      </span>
+                    )}
+                  </div>
                   <div className="recon-value" style={{ color: 'var(--accent-blue)' }}>
                     {formatPaiseAmount(recon.expected_net_paise)}
                   </div>
                 </div>
                 <div className="recon-item">
-                  <div className="recon-label">Received Payout</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                    <div className="recon-label">Received Payout</div>
+                    {recon.received_complete === false && (
+                      <span className="badge badge-amber" style={{ fontSize: '10px', padding: '1px 5px' }}>
+                        Known records only
+                      </span>
+                    )}
+                  </div>
                   <div className="recon-value" style={{ color: 'var(--status-green)' }}>
                     {formatPaiseAmount(recon.received_allocations_paise)}
                   </div>
                 </div>
                 <div className="recon-item">
-                  <div className="recon-label">Documented Pending</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                    <div className="recon-label">Documented Pending</div>
+                    {recon.pending_complete === false && (
+                      <span className="badge badge-amber" style={{ fontSize: '10px', padding: '1px 5px' }}>
+                        Known records only
+                      </span>
+                    )}
+                  </div>
                   <div className="recon-value" style={{ color: 'var(--accent-cyan)' }}>
                     {formatPaiseAmount(recon.documented_pending_paise)}
                   </div>

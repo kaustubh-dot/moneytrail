@@ -78,6 +78,11 @@ export interface ReconciliationTotals {
   unexplained_difference_paise: number;
   reconciled: boolean;
   order_counts?: Record<string, number>;
+  gross_complete?: boolean;
+  refunds_complete?: boolean;
+  fees_complete?: boolean;
+  received_complete?: boolean;
+  pending_complete?: boolean;
 }
 
 export interface InvestigationResult {

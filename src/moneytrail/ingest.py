@@ -315,9 +315,32 @@ def validate_bundle(bundle_path: Path) -> dict[str, Any]:
                 _parse_policy_text(file_bytes_map[p], uuid.uuid4())
             elif entry.kind == "correspondence" and not p.endswith(".pdf"):
                 try:
-                    file_bytes_map[p].decode("utf-8")
+                    c_text = file_bytes_map[p].decode("utf-8")
                 except UnicodeDecodeError as ue:
                     raise ValueError(f"Correspondence file '{entry.path}' is not valid UTF-8: {ue}")
+
+                # ARCHITECTURE.md:128: Correspondence begins with Document-ID: and Published-At: lines
+                c_lines = c_text.splitlines()
+                has_doc_id = False
+                has_pub_at = False
+                for line in c_lines[:5]:
+                    line_s = line.strip()
+                    if line_s.startswith("Document-ID:"):
+                        doc_id_val = line_s.split(":", 1)[1].strip()
+                        if doc_id_val:
+                            has_doc_id = True
+                    elif line_s.startswith("Published-At:"):
+                        pub_val = line_s.split(":", 1)[1].strip()
+                        try:
+                            datetime.fromisoformat(pub_val)
+                            has_pub_at = True
+                        except Exception as e:
+                            raise ValueError(f"Correspondence file '{entry.path}' has malformed Published-At: '{pub_val}': {e}")
+
+                if not has_doc_id:
+                    raise ValueError(f"Correspondence file '{entry.path}' is missing required 'Document-ID:' line")
+                if not has_pub_at:
+                    raise ValueError(f"Correspondence file '{entry.path}' is missing required 'Published-At:' line")
 
         fingerprint = compute_bundle_fingerprint(manifest)
 
@@ -909,8 +932,10 @@ async def import_bundle(
                         if line.startswith("Published-At:"):
                             try:
                                 doc_pub_at = datetime.fromisoformat(line.split(":", 1)[1].strip())
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                raise ValueError(f"Correspondence file '{p}' has malformed Published-At: {e}")
+                    if doc_pub_at is None:
+                        raise ValueError(f"Correspondence file '{p}' missing required Published-At header")
 
                 internal_path = (published_sources_dir / p).as_posix()
                 aliases = [other for other in sha_to_rel_names[entry.sha256.lower()] if other != p]

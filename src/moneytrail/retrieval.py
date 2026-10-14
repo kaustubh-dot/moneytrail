@@ -498,6 +498,8 @@ async def search_evidence(
                 db=reader_conn,
             )
 
+    limit = min(max(1, limit), 6)
+
     query_filter = "WHERE c.case_id = %s"
     params: list[Any] = [case_id]
 
@@ -527,7 +529,7 @@ async def search_evidence(
         JOIN sources s ON s.source_id = c.source_id
         LEFT JOIN policies p ON p.source_id = s.source_id AND p.case_id = c.case_id
         {query_filter}
-          AND (s.published_at IS NULL OR s.published_at < cs.as_of)
+          AND (s.published_at IS NOT NULL AND s.published_at < cs.as_of)
         ORDER BY (c.embedding <=> %s::vector) ASC, s.source_id ASC, c.locator_id ASC
         LIMIT 20;
     """
@@ -556,7 +558,7 @@ async def search_evidence(
             JOIN sources s ON s.source_id = c.source_id
             LEFT JOIN policies p ON p.source_id = s.source_id AND p.case_id = c.case_id
             {query_filter}
-              AND (s.published_at IS NULL OR s.published_at < cs.as_of)
+              AND (s.published_at IS NOT NULL AND s.published_at < cs.as_of)
               AND c.tsv @@ websearch_to_tsquery('english', %s)
             ORDER BY ts_rank_cd(c.tsv, websearch_to_tsquery('english', %s)) DESC, s.source_id ASC, c.locator_id ASC
             LIMIT 20;
@@ -589,7 +591,7 @@ async def search_evidence(
                     JOIN sources s ON s.source_id = c.source_id
                     LEFT JOIN policies p ON p.source_id = s.source_id AND p.case_id = c.case_id
                     {query_filter}
-                      AND (s.published_at IS NULL OR s.published_at < cs.as_of)
+                      AND (s.published_at IS NOT NULL AND s.published_at < cs.as_of)
                       AND c.tsv @@ to_tsquery('english', %s)
                     ORDER BY ts_rank_cd(c.tsv, to_tsquery('english', %s)) DESC, s.source_id ASC, c.locator_id ASC
                     LIMIT %s;

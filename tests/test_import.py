@@ -259,3 +259,56 @@ async def test_import_with_real_indexer_and_locators(test_settings: Settings):
         assert search_res.items[0].kind == "policy"
     finally:
         await reader_conn.close()
+
+
+@pytest.mark.asyncio
+async def test_correspondence_missing_or_malformed_headers_rejected(test_settings: Settings, tmp_path: Path):
+    """
+    F-009 regression test:
+    Verify that correspondence files missing Document-ID: or Published-At:,
+    or containing a malformed Published-At: timestamp, are rejected at import.
+    """
+    demo_zip = Path("fixtures/demo.zip")
+    extract_dir = tmp_path / "case_malformed_corr"
+    with zipfile.ZipFile(demo_zip) as zf:
+        zf.extractall(extract_dir)
+
+    # 1. Missing Document-ID
+    note_path = extract_dir / "docs" / "settlement-note.md"
+    note_path.write_text("Published-At: 2026-09-30T19:00:00+05:30\n\nMissing doc id\n", encoding="utf-8")
+
+    # Re-calculate manifest sha256 for note
+    manifest_path = extract_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for f in manifest["files"]:
+        if f["path"] == "docs/settlement-note.md":
+            f["sha256"] = hashlib.sha256(note_path.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    test_zip = tmp_path / "missing_doc_id.zip"
+    with zipfile.ZipFile(test_zip, "w") as zf:
+        for root, _, files in os.walk(extract_dir):
+            for file in files:
+                abs_f = Path(root) / file
+                zf.write(abs_f, arcname=abs_f.relative_to(extract_dir).as_posix())
+
+    with pytest.raises(ValueError, match="missing required 'Document-ID:' line"):
+        await import_bundle(test_zip, test_settings)
+
+    # 2. Malformed Published-At
+    note_path.write_text("Document-ID: DOC-INVALID\nPublished-At: not-a-date\n\nInvalid timestamp\n", encoding="utf-8")
+    for f in manifest["files"]:
+        if f["path"] == "docs/settlement-note.md":
+            f["sha256"] = hashlib.sha256(note_path.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    test_zip2 = tmp_path / "malformed_pub_at.zip"
+    with zipfile.ZipFile(test_zip2, "w") as zf:
+        for root, _, files in os.walk(extract_dir):
+            for file in files:
+                abs_f = Path(root) / file
+                zf.write(abs_f, arcname=abs_f.relative_to(extract_dir).as_posix())
+
+    with pytest.raises(ValueError, match="malformed Published-At"):
+        await import_bundle(test_zip2, test_settings)
+

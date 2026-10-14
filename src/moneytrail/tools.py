@@ -165,7 +165,7 @@ async def reconcile(case_id: uuid.UUID, db: psycopg.AsyncConnection) -> Reconcil
 
     # 1. Gross calculation
     gross_paise = sum(o["gross_paise"] for o in orders)
-    gross_citations = [
+    gross_citations: list[Citation] = [
         Citation(
             source_id=o["source_id"],
             locator_id=o["row_locators"][0] if o["row_locators"] else "csv:r1",
@@ -175,12 +175,23 @@ async def reconcile(case_id: uuid.UUID, db: psycopg.AsyncConnection) -> Reconcil
     ]
     gross_included_ids = [o["order_id"] for o in orders]
 
-    # 2. Refunds deduction calculation
-    completed_refunds_paise = 0
     refunds_citations: list[Citation] = []
     refunds_included_ids: list[str] = []
     refunds_excluded: list[dict[str, Any]] = []
 
+    fees_citations: list[Citation] = []
+    fees_included_ids: list[str] = []
+    fees_excluded: list[dict[str, Any]] = []
+
+    received_citations: list[Citation] = []
+    received_included_link_ids: list[str] = []
+    received_excluded_links: list[dict[str, Any]] = []
+
+    pending_citations: list[Citation] = []
+    pending_included_order_ids: list[str] = []
+
+    # 2. Refunds deduction calculation
+    completed_refunds_paise = 0
     for r in refunds:
         # Completed refunds with processed_at strictly before cutoff as_of
         if r["status"] == "completed" and r["processed_at"] and r["processed_at"] < as_of:
@@ -210,10 +221,6 @@ async def reconcile(case_id: uuid.UUID, db: psycopg.AsyncConnection) -> Reconcil
 
     # 3. Fees calculation
     assessed_fees_paise = 0
-    fees_citations: list[Citation] = []
-    fees_included_ids: list[str] = []
-    fees_excluded: list[dict[str, Any]] = []
-
     for f in fees:
         if f["assessed_at"] < as_of:
             assessed_fees_paise += f["amount_paise"]
@@ -273,9 +280,6 @@ async def reconcile(case_id: uuid.UUID, db: psycopg.AsyncConnection) -> Reconcil
 
     # 4. Received allocations calculation
     received_allocations_paise = 0
-    received_citations: list[Citation] = []
-    received_included_link_ids: list[str] = []
-    received_excluded_links: list[dict[str, Any]] = []
 
     for lk in payout_links:
         payout = payouts_by_id.get(lk["payout_id"])
@@ -366,16 +370,23 @@ async def reconcile(case_id: uuid.UUID, db: psycopg.AsyncConnection) -> Reconcil
                     f"Pending order {oid} has conflicting received link ({order_links[0]['link_id']})"
                 )
             else:
-                # Documented pending: explicit pending orders without received allocation
-                documented_pending_paise += order_net
-                pending_included_order_ids.append(oid)
-                pending_citations.append(
-                    Citation(
-                        source_id=o["source_id"],
-                        locator_id=o["row_locators"][0] if o["row_locators"] else "csv:r1",
-                        label=f"Order {oid} Documented Pending",
+                # Documented pending: explicit pending orders without received allocation and with complete refund/fee evidence
+                if completeness.get("refunds") == "complete" and completeness.get("fees") == "complete":
+                    documented_pending_paise += order_net
+                    pending_included_order_ids.append(oid)
+                    pending_citations.append(
+                        Citation(
+                            source_id=o["source_id"],
+                            locator_id=o["row_locators"][0] if o["row_locators"] else "csv:r1",
+                            label=f"Order {oid} Documented Pending",
+                        )
                     )
-                )
+                else:
+                    findings.append({
+                        "code": "INCOMPLETE_PENDING_EVIDENCE",
+                        "summary": f"Pending order {oid} cannot establish verified pending total because refund or fee evidence is incomplete in manifest",
+                        "order_id": oid,
+                    })
 
         elif state == "unknown":
             critical_accounting_issues.append(f"Order {oid} has unknown settlement state")
@@ -535,6 +546,19 @@ async def reconcile(case_id: uuid.UUID, db: psycopg.AsyncConnection) -> Reconcil
         ),
     ]
 
+    gross_complete = completeness.get("orders") == "complete"
+    refunds_complete = completeness.get("refunds") == "complete"
+    fees_complete = completeness.get("fees") == "complete"
+    received_complete = (
+        completeness.get("payouts") == "complete"
+        and completeness.get("payout_links") == "complete"
+    )
+    pending_complete = (
+        completeness.get("orders") == "complete"
+        and completeness.get("refunds") == "complete"
+        and completeness.get("fees") == "complete"
+    )
+
     return Reconciliation(
         gross_paise=gross_paise,
         completed_refunds_paise=completed_refunds_paise,
@@ -547,6 +571,11 @@ async def reconcile(case_id: uuid.UUID, db: psycopg.AsyncConnection) -> Reconcil
         findings=findings,
         details_omitted=False,
         order_counts=order_counts,
+        gross_complete=gross_complete,
+        refunds_complete=refunds_complete,
+        fees_complete=fees_complete,
+        received_complete=received_complete,
+        pending_complete=pending_complete,
     )
 
 
@@ -558,6 +587,16 @@ async def inspect_order(
     Returns OrderEvidence with integer paise and resolving citations.
     """
     async with db.cursor(row_factory=dict_row) as cur:
+        # Fetch case as_of cutoff
+        await cur.execute(
+            "SELECT as_of FROM cases WHERE case_id = %s;",
+            [case_id],
+        )
+        case_row = await cur.fetchone()
+        if not case_row:
+            raise KeyError(f"Case '{case_id}' not found; order '{order_id}' not found in case")
+        as_of = case_row["as_of"]
+
         # Fetch order
         await cur.execute(
             """
@@ -617,11 +656,87 @@ async def inspect_order(
         )
 
     gross_paise = order_row["gross_paise"]
-    completed_refunds = sum(
-        r["amount_paise"] for r in order_refunds if r["status"] == "completed"
-    )
-    assessed_fees = sum(f["amount_paise"] for f in order_fees)
+
+    completed_refunds = 0
+    refund_cits: list[Citation] = []
+    processed_refunds: list[dict[str, Any]] = []
+    for r in order_refunds:
+        r_dict = dict(r)
+        if r["status"] == "completed" and r["processed_at"] and r["processed_at"] < as_of:
+            completed_refunds += r["amount_paise"]
+            r_dict["included"] = True
+            if r["row_locators"]:
+                refund_cits.append(
+                    Citation(
+                        source_id=r["source_id"],
+                        locator_id=r["row_locators"][0],
+                        label=f"Refund {r['refund_id']}",
+                    )
+                )
+        else:
+            reason = "pending status" if r["status"] != "completed" else "processed_at at or after as_of cutoff"
+            r_dict["included"] = False
+            r_dict["excluded_reason"] = reason
+        processed_refunds.append(r_dict)
+
+    assessed_fees = 0
+    fee_cits: list[Citation] = []
+    processed_fees: list[dict[str, Any]] = []
+    for f in order_fees:
+        f_dict = dict(f)
+        if f["assessed_at"] < as_of:
+            assessed_fees += f["amount_paise"]
+            f_dict["included"] = True
+            if f["row_locators"]:
+                fee_cits.append(
+                    Citation(
+                        source_id=f["source_id"],
+                        locator_id=f["row_locators"][0],
+                        label=f"Fee {f['fee_id']}",
+                    )
+                )
+        else:
+            reason = "assessed_at at or after as_of cutoff"
+            f_dict["included"] = False
+            f_dict["excluded_reason"] = reason
+        processed_fees.append(f_dict)
+
     expected_net_paise = gross_paise - completed_refunds - assessed_fees
+
+    processed_links: list[dict[str, Any]] = []
+    link_cits: list[Citation] = []
+    received_paise = 0
+    for lk in order_links:
+        lk_dict = dict(lk)
+        if (
+            lk["recorded_at"] < as_of
+            and lk["received_at"]
+            and lk["received_at"] < as_of
+            and lk["payout_status"] == "received"
+        ):
+            received_paise += lk["amount_paise"]
+            lk_dict["included"] = True
+            if lk["row_locators"]:
+                link_cits.append(
+                    Citation(
+                        source_id=lk["source_id"],
+                        locator_id=lk["row_locators"][0],
+                        label=f"Payout Link {lk['link_id']}",
+                    )
+                )
+        else:
+            reason = (
+                "recorded_at at or after as_of cutoff"
+                if lk["recorded_at"] >= as_of
+                else (
+                    "payout received_at at or after as_of cutoff"
+                    if (lk["received_at"] and lk["received_at"] >= as_of)
+                    else f"payout status is {lk['payout_status']}"
+                )
+            )
+            lk_dict["included"] = False
+            lk_dict["excluded_reason"] = reason
+        processed_links.append(lk_dict)
 
     citations: list[Citation] = []
     # Order citation
@@ -633,38 +748,11 @@ async def inspect_order(
                 label=f"Order {order_id} Row",
             )
         )
-    refund_cits: list[Citation] = []
-    for r in order_refunds:
-        if r["row_locators"]:
-            c = Citation(
-                source_id=r["source_id"],
-                locator_id=r["row_locators"][0],
-                label=f"Refund {r['refund_id']}",
-            )
-            citations.append(c)
-            refund_cits.append(c)
+    citations.extend(refund_cits)
+    citations.extend(fee_cits)
+    citations.extend(link_cits)
 
-    fee_cits: list[Citation] = []
-    for f in order_fees:
-        if f["row_locators"]:
-            c = Citation(
-                source_id=f["source_id"],
-                locator_id=f["row_locators"][0],
-                label=f"Fee {f['fee_id']}",
-            )
-            citations.append(c)
-            fee_cits.append(c)
-
-    for lk in order_links:
-        if lk["row_locators"]:
-            citations.append(
-                Citation(
-                    source_id=lk["source_id"],
-                    locator_id=lk["row_locators"][0],
-                    label=f"Payout Link {lk['link_id']}",
-                )
-            )
-
+    net_cits = [c for c in citations if c in citations[:1] or c in refund_cits or c in fee_cits]
     facts = [
         Fact(
             fact_id=f"fact_{order_id}_gross",
@@ -684,7 +772,11 @@ async def inspect_order(
             currency="INR",
             complete=True,
             citations=refund_cits,
-            derivation={"order_id": order_id, "refunds_count": len(order_refunds)},
+            derivation={
+                "order_id": order_id,
+                "completed_refunds_count": sum(1 for r in processed_refunds if r.get("included")),
+                "excluded_refunds_count": sum(1 for r in processed_refunds if not r.get("included")),
+            },
         ),
         Fact(
             fact_id=f"fact_{order_id}_fees",
@@ -694,7 +786,11 @@ async def inspect_order(
             currency="INR",
             complete=True,
             citations=fee_cits,
-            derivation={"order_id": order_id, "fees_count": len(order_fees)},
+            derivation={
+                "order_id": order_id,
+                "assessed_fees_count": sum(1 for f in processed_fees if f.get("included")),
+                "excluded_fees_count": sum(1 for f in processed_fees if not f.get("included")),
+            },
         ),
         Fact(
             fact_id=f"fact_{order_id}_net",
@@ -703,7 +799,7 @@ async def inspect_order(
             value_paise=expected_net_paise,
             currency="INR",
             complete=True,
-            citations=citations,
+            citations=net_cits,
             derivation={
                 "order_id": order_id,
                 "gross": gross_paise,
@@ -712,17 +808,37 @@ async def inspect_order(
             },
         ),
     ]
-    if order_row["settlement_state"] == "pending":
+
+    if received_paise > 0 or len(link_cits) > 0:
+        facts.append(
+            Fact(
+                fact_id=f"fact_{order_id}_received",
+                kind="money",
+                value=received_paise,
+                value_paise=received_paise,
+                currency="INR",
+                complete=True,
+                citations=link_cits,
+                derivation={"order_id": order_id, "effective_links_count": len(link_cits)},
+            )
+        )
+
+    if order_row["settlement_state"] == "pending" or (received_paise == 0 and len(link_cits) == 0):
+        pending_amount = expected_net_paise - received_paise
         facts.append(
             Fact(
                 fact_id=f"fact_{order_id}_pending",
                 kind="money",
-                value=expected_net_paise,
-                value_paise=expected_net_paise,
+                value=pending_amount,
+                value_paise=pending_amount,
                 currency="INR",
                 complete=True,
                 citations=citations[:1],
-                derivation={"order_id": order_id, "settlement_state": "pending"},
+                derivation={
+                    "order_id": order_id,
+                    "settlement_state": order_row["settlement_state"],
+                    "pending_amount": pending_amount,
+                },
             )
         )
 
@@ -731,9 +847,9 @@ async def inspect_order(
         captured_at=order_row["captured_at"],
         gross_paise=gross_paise,
         settlement_state=order_row["settlement_state"],
-        refunds=[dict(r) for r in order_refunds],
-        fees=[dict(f) for f in order_fees],
-        links=[dict(lk) for lk in order_links],
+        refunds=processed_refunds,
+        fees=processed_fees,
+        links=processed_links,
         expected_net_paise=expected_net_paise,
         citations=citations,
         facts=facts,
@@ -792,8 +908,7 @@ async def select_policy(
         if order_ids is not None:
             await cur.execute(
                 """
-                SELECT o.order_id, o.captured_at, o.gross_paise,
-                       COALESCE((SELECT f.amount_paise FROM fees f WHERE f.case_id = o.case_id AND f.order_id = o.order_id LIMIT 1), NULL) as fee_paise
+                SELECT o.order_id, o.captured_at, o.gross_paise
                 FROM orders o
                 WHERE o.case_id = %s AND o.order_id = ANY(%s)
                 ORDER BY o.order_id ASC;
@@ -808,8 +923,7 @@ async def select_policy(
         else:
             await cur.execute(
                 """
-                SELECT o.order_id, o.captured_at, o.gross_paise,
-                       COALESCE((SELECT f.amount_paise FROM fees f WHERE f.case_id = o.case_id AND f.order_id = o.order_id LIMIT 1), NULL) as fee_paise
+                SELECT o.order_id, o.captured_at, o.gross_paise
                 FROM orders o
                 WHERE o.case_id = %s
                 ORDER BY o.order_id ASC;
@@ -829,33 +943,9 @@ async def select_policy(
         for p in published_policies:
             eff_from = p["effective_from"]
             eff_to = p["effective_to"]
-            # effective_from <= captured_local_date <= effective_to (or open if eff_to is None)
-            if eff_from <= captured_date and (eff_to is None or captured_date <= eff_to):
+            # ARCHITECTURE.md:130: effective_from <= captured_local_date < effective_to (or open if eff_to is None)
+            if eff_from <= captured_date and (eff_to is None or captured_date < eff_to):
                 matching.append(p)
-
-        # Disambiguate if multiple policies match due to same-day boundary transition
-        boundary_transition = (
-            len(matching) > 1
-            and any(p["effective_to"] == captured_date for p in matching)
-            and any(p["effective_from"] == captured_date for p in matching)
-        )
-        if boundary_transition:
-            fee_paise = o.get("fee_paise")
-            gross_paise = o.get("gross_paise", 0)
-            if fee_paise is not None and gross_paise and gross_paise > 0:
-                actual_bps = round(fee_paise * 10000 / gross_paise)
-                matching_by_fee = [p for p in matching if p["fee_bps"] == actual_bps]
-                if len(matching_by_fee) == 1:
-                    matching = matching_by_fee
-            if len(matching) > 1:
-                if captured_dt.hour < 12:
-                    morning_pols = [p for p in matching if p["effective_to"] == captured_date]
-                    if len(morning_pols) == 1:
-                        matching = morning_pols
-                else:
-                    afternoon_pols = [p for p in matching if p["effective_from"] == captured_date]
-                    if len(afternoon_pols) == 1:
-                        matching = afternoon_pols
 
         order_to_matching[oid] = matching
 
@@ -968,7 +1058,7 @@ async def select_policy(
         })
 
     facts: list[Fact] = []
-    pols_for_facts = {p["policy_id"]: p for p in published_policies}
+    pols_for_facts = all_matching_pols_by_id
     seen_fids: set[str] = set()
     for pid, p in pols_for_facts.items():
         locators = p["metadata_locators"] if isinstance(p["metadata_locators"], list) else json.loads(p["metadata_locators"])
@@ -1188,7 +1278,7 @@ async def dispatch_tool(
             if not call.query or not call.query.strip():
                 raise ValueError("MISSING_ARGUMENT: search_evidence requires a non-empty query")
             kind = call.kind or "all"
-            limit = min(call.limit or 6, 20)
+            limit = min(max(1, call.limit or 6), 6)
             search_res = await search_evidence(
                 case_id=case_id,
                 query=call.query.strip(),

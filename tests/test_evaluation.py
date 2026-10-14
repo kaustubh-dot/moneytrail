@@ -11,6 +11,7 @@ from moneytrail.evaluation import (
     check_working_tree_clean,
     create_freeze_manifest,
     validate_freeze,
+    generate_final_report,
 )
 from moneytrail.schemas import (
     InvestigationResult,
@@ -262,3 +263,141 @@ def test_freeze_manifest_and_validation(monkeypatch, tmp_path: Path):
     # Validate freeze against test questions
     validated = validate_freeze(freeze_file, eval_root=Path("evals"))
     assert validated["commit_hash"] == manifest["commit_hash"]
+
+
+def test_score_case_received_paise_disallows_net():
+    """Verify that score_case does NOT accept fact_net or _net when received_paise is required."""
+    cid = uuid.uuid4()
+    gold = {
+        "eval_id": "test-received-fail",
+        "expected_outcome": "partial",
+        "required_fact_values": {"received_paise": 0},
+    }
+
+    # Model emitted fact_net with net amount (4875000), not received_paise (0)
+    inv_res = _make_res(
+        case_id=cid,
+        outcome="partial",
+        claims=[Claim(text_template="Net was {{fact:fact_net}}.", text="Net was INR 48,750.", fact_ids=["fact_net"])],
+        selected_facts=[Fact(fact_id="fact_net", kind="money", value=4875000, value_paise=4875000, currency="INR")],
+    )
+
+    scores = score_case(gold=gold, inv_res=inv_res, elapsed_s=1.0, tool_calls_used=1, model_turns_used=1)
+    assert scores["money"]["pass"] is False
+    assert any("received_paise" in r for r in scores["money"]["failures"])
+
+
+def test_score_case_ungrounded_extra_money_fact():
+    """Verify score_case catches ungrounded extra money facts not present in gold or derivations."""
+    cid = uuid.uuid4()
+    gold = {
+        "eval_id": "test-grounding-fail",
+        "expected_outcome": "explained",
+        "required_fact_values": {"gross_paise": 5000000},
+    }
+
+    inv_res = _make_res(
+        case_id=cid,
+        outcome="explained",
+        claims=[
+            Claim(
+                text_template="Gross was {{fact:fact_gross}} with bonus {{fact:fact_hallucinated}}.",
+                text="Gross was INR 50,000 with bonus INR 99,999.99.",
+                fact_ids=["fact_gross", "fact_hallucinated"],
+            )
+        ],
+        selected_facts=[
+            Fact(fact_id="fact_gross", kind="money", value=5000000, value_paise=5000000, currency="INR"),
+            Fact(fact_id="fact_hallucinated", kind="money", value=9999999, value_paise=9999999, currency="INR"),
+        ],
+    )
+
+    scores = score_case(gold=gold, inv_res=inv_res, elapsed_s=1.0, tool_calls_used=1, model_turns_used=1)
+    assert scores["money"]["pass"] is False
+    assert any("Ungrounded monetary fact 'fact_hallucinated'" in r for r in scores["money"]["failures"])
+
+
+def test_score_case_exact_citation_locator_mismatch():
+    """Verify score_case checks exact locator and locator_type in required_citations."""
+    cid = uuid.uuid4()
+    sid = uuid.uuid4()
+    source_map = {sid: {"original_path": "orders.csv", "media_type": "text/csv"}}
+
+    gold = {
+        "eval_id": "test-cit-locator-fail",
+        "expected_outcome": "explained",
+        "required_citations": [{"source_path": "orders.csv", "locator_type": "csv", "locator": "csv:row:5"}],
+    }
+
+    # Model cited row 1 instead of required row 5
+    inv_res = _make_res(
+        case_id=cid,
+        outcome="explained",
+        claims=[Claim(text_template="Valid.", text="Valid.")],
+        citations=[Citation(source_id=sid, locator_id="csv:row:1", label="Row 1")],
+    )
+
+    scores = score_case(gold=gold, inv_res=inv_res, elapsed_s=1.0, tool_calls_used=1, model_turns_used=1, source_map=source_map)
+    assert scores["evidence"]["pass"] is False
+    assert any("locator 'csv:row:5'" in r for r in scores["evidence"]["failures"])
+
+
+def test_generate_final_report_fails_closed_on_missing_retrieval(tmp_path: Path):
+    """Verify generate_final_report fails closed when retrieval report is missing."""
+    import json
+    eval_output = tmp_path / "test_paired.json"
+    summary_output = tmp_path / "summary.md"
+    freeze_file = tmp_path / "freeze.json"
+
+    # Minimal runs data where all cases passed
+    runs = {}
+    for i in range(1, 19):
+        fam = "A" if i <= 6 else ("B" if i <= 12 else "C")
+        runs[f"test-{i}"] = {
+            "eval_id": f"test-{i}",
+            "family": fam,
+            "expected_outcome": "explained",
+            "fixed": {
+                "outcome": "explained",
+                "elapsed_s": 1.0,
+                "budget_summary": {"tool_calls_used": 1, "model_turns_used": 1},
+                "scores": {"overall": True},
+                "review": {"support_judgment": "pass", "outcome_judgment": "pass"},
+            },
+            "agent": {
+                "outcome": "explained",
+                "elapsed_s": 2.0,
+                "budget_summary": {"tool_calls_used": 2, "model_turns_used": 1},
+                "scores": {
+                    "overall": True,
+                    "money": {"pass": True, "failures": []},
+                    "boundary": {"pass": True, "failures": []},
+                    "execution": {"pass": True, "failures": []},
+                    "evidence": {"pass": True, "failures": []},
+                    "outcome": {"pass": True, "failures": []},
+                    "failure_reasons": [],
+                },
+                "review": {"support_judgment": "pass", "outcome_judgment": "pass"},
+            },
+            "comparison": {"winner": "agent"},
+        }
+
+    eval_data = {
+        "split": "test",
+        "freeze_commit": "abcdef123456",
+        "runs": runs,
+    }
+    eval_output.write_text(json.dumps(eval_data), encoding="utf-8")
+
+    freeze_data = {
+        "commit_hash": "abcdef123456",
+        "pinned_revisions": {"model": "qwen3:8b", "model_digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41"},
+        "hardware": {"cpu": "AMD", "ram": "32GB"},
+    }
+    freeze_file.write_text(json.dumps(freeze_data), encoding="utf-8")
+
+    report = generate_final_report(eval_output, summary_output, freeze_path=freeze_file)
+    # Since test_retrieval.json is missing, retrieval recall must default to 0.0 and fail G5
+    assert "FAIL (REJECTED)" in report
+    assert "DOES NOT SATISFY" in report
+

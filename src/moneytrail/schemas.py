@@ -125,6 +125,11 @@ class Reconciliation(BaseModel):
     findings: list[dict[str, Any]] = Field(default_factory=list)
     details_omitted: bool = False
     order_counts: dict[str, int] = Field(default_factory=dict)
+    gross_complete: bool = True
+    refunds_complete: bool = True
+    fees_complete: bool = True
+    received_complete: bool = True
+    pending_complete: bool = True
 
 
 class OrderEvidence(BaseModel):
@@ -167,7 +172,7 @@ class SearchEvidenceCall(BaseModel):
     action: Literal["search_evidence"] = "search_evidence"
     query: str
     kind: Literal["all", "policy", "correspondence"] = "all"
-    limit: int = 6
+    limit: int = Field(default=6, ge=1, le=6)
 
 
 class ReadSourceCall(BaseModel):

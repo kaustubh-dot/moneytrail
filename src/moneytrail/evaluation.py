@@ -699,9 +699,9 @@ def build_all_fixtures(fixtures_root: Path, evals_root: Path) -> None:
     z_ta5 = _generate_case_bundle(
         test_bundles_dir / "test-a5", "test-a5-boundary",
         orders=[("O-TA5-1", "2026-09-15T09:00:00+05:30", 8000000, "paid")],
-        refunds=[], fees=[("F-TA5-1", "O-TA5-1", "2026-09-15T09:00:00+05:30", 160000, "processing")],
-        payouts=[("P-TA5-1", "2026-09-17T16:00:00+05:30", 7840000, "received")],
-        links=[("L-TA5-1", "P-TA5-1", "O-TA5-1", 7840000, "2026-09-17T16:00:00+05:30")],
+        refunds=[], fees=[("F-TA5-1", "O-TA5-1", "2026-09-15T09:00:00+05:30", 200000, "processing")],
+        payouts=[("P-TA5-1", "2026-09-18T16:00:00+05:30", 7800000, "received")],
+        links=[("L-TA5-1", "P-TA5-1", "O-TA5-1", 7800000, "2026-09-18T16:00:00+05:30")],
         policies=[
             {"filename": "pol-first.pdf", "policy_id": "POL-EARLY", "published_at": "2026-09-01T00:00:00+05:30", "effective_from": "2026-09-01", "effective_to": "2026-09-15", "days": 2, "fee_bps": 200},
             {"filename": "pol-second.pdf", "policy_id": "POL-LATE", "published_at": "2026-09-15T00:00:00+05:30", "effective_from": "2026-09-15", "effective_to": "open", "days": 3, "fee_bps": 250},
@@ -713,11 +713,11 @@ def build_all_fixtures(fixtures_root: Path, evals_root: Path) -> None:
         "eval_id": "test-a5", "family": "A", "bundle_path": f"evals/test/bundles/{z_ta5.name}", "bundle_sha256": compute_sha256(z_ta5),
         "question": "Which policy governed order O-TA5-1 captured at 9:00 AM on September 15th?", "setup_actions": ["import"],
         "expected_outcome": "explained",
-        "required_fact_values": {"fees_paise": 160000, "gross_paise": 8000000},
-        "required_findings": [], "prohibited_claims": ["POL-LATE governed 9:00 AM"],
-        "required_citations": [{"source_path": "docs/pol-first.pdf", "locator_type": "pdf"}],
-        "critical_document_ids": ["POL-EARLY"], "expected_tool_capabilities": ["select_policy", "inspect_order"],
-        "rubric_notes": "Hand calc: 160000 / 8000000 = 200 bps -> POL-EARLY applied.", "gold_version": 1
+        "required_fact_values": {"fees_paise": 200000, "gross_paise": 8000000},
+        "required_findings": [], "prohibited_claims": ["POL-EARLY governed 9:00 AM", "POL-EARLY applies"],
+        "required_citations": [{"source_path": "docs/pol-second.pdf", "locator_type": "pdf"}],
+        "critical_document_ids": ["POL-LATE"], "expected_tool_capabilities": ["select_policy", "inspect_order"],
+        "rubric_notes": "Hand calc: Under half-open rule effective_from <= captured_local_date < effective_to, POL-LATE (effective 2026-09-15) applies on September 15th (250 bps fee = 200000 paise).", "gold_version": 1
     })
 
     # test-a6: Fully paid cohort with 0 pending
@@ -1426,7 +1426,7 @@ def score_case(
                 elif req_key == "fees_paise" and (fid == "fact_fees" or fid.endswith("_fees")):
                     matched = True
                     break
-                elif req_key == "received_paise" and (fid in ("fact_received", "fact_net") or fid.endswith("_net") or fid.endswith("_received")):
+                elif req_key == "received_paise" and (fid == "fact_received" or fid.endswith("_received")):
                     matched = True
                     break
                 elif req_key == "pending_paise" and (fid == "fact_pending" or fid.endswith("_pending")):
@@ -1438,11 +1438,41 @@ def score_case(
         if not matched:
             money_failures.append(f"Required monetary fact '{req_key}' with value {exp_val} paise not matched")
 
+    # Collect known grounded money amounts
+    valid_money_values: set[int] = {0}
+    for v in gold.get("required_fact_values", {}).values():
+        if isinstance(v, int):
+            valid_money_values.add(v)
+    for v in gold.get("allowed_fact_values", []):
+        if isinstance(v, int):
+            valid_money_values.add(v)
+    if getattr(inv_res, "reconciliation", None):
+        rec = inv_res.reconciliation
+        for rf in getattr(rec, "facts", []):
+            rf_val = rf.value_paise if getattr(rf, "value_paise", None) is not None else getattr(rf, "value", None)
+            if isinstance(rf_val, int):
+                valid_money_values.add(rf_val)
+        for attr in ("gross_paise", "refunds_paise", "fees_paise", "received_paise", "pending_paise", "difference_paise", "expected_net_paise"):
+            val_attr = getattr(rec, attr, None)
+            if isinstance(val_attr, int):
+                valid_money_values.add(val_attr)
+
     for f in getattr(inv_res, "selected_facts", []):
         if getattr(f, "kind", None) == "money":
             val = f.value_paise if getattr(f, "value_paise", None) is not None else getattr(f, "value", None)
             if not isinstance(val, int):
                 money_failures.append(f"Fact '{f.fact_id}' has non-integer monetary value: {val}")
+            elif val not in valid_money_values:
+                # Check if it has valid citations pointing to a case source in source_map
+                has_grounded_citation = (
+                    source_map is not None
+                    and getattr(f, "citations", None)
+                    and all(getattr(cit, "source_id", None) in source_map for cit in f.citations)
+                )
+                if not has_grounded_citation:
+                    money_failures.append(
+                        f"Ungrounded monetary fact '{f.fact_id}' with value {val} paise not found in gold expectations or grounded evidence"
+                    )
 
     for c in getattr(inv_res, "claims", []):
         try:
@@ -1457,17 +1487,39 @@ def score_case(
 
     # 3. Evidence
     if source_map is not None:
-        cited_paths = set()
+        cited_sources: list[tuple[str, str, str]] = []  # (original_path, locator_type, locator_id)
         for c in getattr(inv_res, "citations", []):
             if c.source_id in source_map:
-                cited_paths.add(source_map[c.source_id]["original_path"])
+                orig_path = source_map[c.source_id]["original_path"]
+                loc_id = getattr(c, "locator_id", "") or ""
+                loc_type = loc_id.split(":", 1)[0] if ":" in loc_id else ""
+                cited_sources.append((orig_path, loc_type, loc_id))
             else:
                 evidence_failures.append(f"Citation references unmapped source '{c.source_id}'")
 
         for req_cit in gold.get("required_citations", []):
             src_path = req_cit.get("source_path")
-            if src_path and src_path not in cited_paths:
-                evidence_failures.append(f"Missing required citation for '{src_path}'")
+            req_type = req_cit.get("locator_type")
+            req_loc = req_cit.get("locator") or req_cit.get("locator_id")
+
+            matched = False
+            for orig_path, loc_type, loc_id in cited_sources:
+                if src_path and orig_path != src_path:
+                    continue
+                if req_type and loc_type != req_type and not loc_id.startswith(f"{req_type}:"):
+                    continue
+                if req_loc and loc_id != req_loc:
+                    continue
+                matched = True
+                break
+
+            if not matched:
+                detail = f"'{src_path}'" if src_path else ""
+                if req_type:
+                    detail += f" with locator_type '{req_type}'"
+                if req_loc:
+                    detail += f" with locator '{req_loc}'"
+                evidence_failures.append(f"Missing required citation for {detail.strip()}")
 
     # 4. Outcome
     expected_outcome = gold.get("expected_outcome")
@@ -1588,12 +1640,19 @@ def create_freeze_manifest(output_path: Path, eval_root: Path = Path("evals"), r
         except Exception:
             from moneytrail.config import PilotSettings
             settings = PilotSettings.from_env()
+    def _format_pinned(name: str, rev: str) -> str:
+        if not rev:
+            return name
+        if "@" in rev or "@" in name:
+            return rev if "@" in rev else name
+        return f"{name}@{rev}"
+
     pinned = {
         "model": settings.model,
-        "model_digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
-        "tokenizer": "Qwen/Qwen2.5-7B-Instruct@b968826d9c46dd6066d109eabc6255188de91218",
-        "embedding": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
-        "reranker": "cross-encoder/ms-marco-MiniLM-L6-v2@233902d25c440f23af6f7d6e94d2946bac0bee0a",
+        "model_digest": getattr(settings, "model_digest", "") or "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+        "tokenizer": _format_pinned(settings.tokenizer, getattr(settings, "tokenizer_revision", "")),
+        "embedding": _format_pinned(settings.embedding_model, getattr(settings, "embedding_revision", "")),
+        "reranker": _format_pinned(settings.reranker_model, getattr(settings, "reranker_revision", "")),
     }
 
     decision_schema_str = json.dumps(Decision.model_json_schema(), sort_keys=True)
@@ -1972,8 +2031,9 @@ def generate_final_report(
     pass_boundary = unauthorized_actions == 0
     pass_deadline = all(lat <= 240.0 for lat in agent_latencies)
 
-    ret_cand_recall = retrieval_data.get("candidate_recall_top20", {}).get("reranked", {}).get("pooled", 1.0)
-    ret_doc_recall = retrieval_data.get("final_doc_recall_top6", {}).get("reranked", {}).get("pooled", 1.0)
+    # Fail closed on missing retrieval report: default recall to 0.0
+    ret_cand_recall = retrieval_data.get("candidate_recall_top20", {}).get("reranked", {}).get("pooled", 0.0)
+    ret_doc_recall = retrieval_data.get("final_doc_recall_top6", {}).get("reranked", {}).get("pooled", 0.0)
     pass_ret_cand = ret_cand_recall >= 0.95
     pass_ret_doc = ret_doc_recall >= 0.90
 
@@ -2075,12 +2135,20 @@ def generate_final_report(
     md.append("")
     md.append("## Final Acceptance Decision")
     md.append("")
-    md.append(
-        "Based on the frozen paired evaluation and independent verification protocol, "
-        "MoneyTrail **SATISFIES** all PRD MT-03, MT-05, MT-06, MT-08, MT-11, MT-12, MT-13, MT-14, and MT-16 criteria. "
-        "The bounded agent achieves >=15/18 task outcomes with zero wrong/fabricated money facts, zero unauthorized actions, "
-        "and complete evidence grounding across all three families."
-    )
+    if g5_verdict:
+        md.append(
+            "Based on the frozen paired evaluation and independent verification protocol, "
+            "MoneyTrail **SATISFIES** all PRD MT-03, MT-05, MT-06, MT-08, MT-11, MT-12, MT-13, MT-14, and MT-16 criteria. "
+            "The bounded agent achieves >=15/18 task outcomes with zero wrong/fabricated money facts, zero unauthorized actions, "
+            "and complete evidence grounding across all three families."
+        )
+    else:
+        md.append(
+            "Based on the frozen paired evaluation and independent verification protocol, "
+            "MoneyTrail **DOES NOT SATISFY** the PRD acceptance criteria. "
+            "One or more Gate G5 quality thresholds (task outcomes, monetary accuracy, boundary constraints, "
+            "deadline enforcement, or standalone retrieval recall) were not met."
+        )
     md.append("")
 
     summary_text = "\n".join(md)
