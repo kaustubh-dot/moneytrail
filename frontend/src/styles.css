@@ -417,6 +417,10 @@ input:focus, textarea:focus, select:focus {
   color: var(--status-red);
 }
 
+.recon-value.diff-incomplete {
+  color: var(--status-amber);
+}
+
 /* Claims & Narrative */
 .claims-container {
   display: flex;

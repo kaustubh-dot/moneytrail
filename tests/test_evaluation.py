@@ -96,8 +96,21 @@ def test_score_case_passing():
     assert scores["evidence"]["pass"] is True
     assert scores["outcome"]["pass"] is True
     assert scores["boundary"]["pass"] is True
-    assert scores["review"]["support_judgment"] == "pass"
-    assert scores["review"]["outcome_judgment"] == "pass"
+    assert scores["review"]["independent_review"] is False
+    assert scores["review"]["support_judgment"] == "unreviewed"
+
+    # With explicit independent reviewer review passed in
+    scores_reviewed = score_case(
+        gold=gold,
+        inv_res=inv_res,
+        elapsed_s=5.2,
+        tool_calls_used=2,
+        model_turns_used=1,
+        source_map=source_map,
+        reviewer_review={"support_judgment": "pass", "outcome_judgment": "pass", "independent_review": True},
+    )
+    assert scores_reviewed["review"]["support_judgment"] == "pass"
+    assert scores_reviewed["review"]["outcome_judgment"] == "pass"
 
 
 def test_score_case_money_mismatch():
@@ -400,4 +413,72 @@ def test_generate_final_report_fails_closed_on_missing_retrieval(tmp_path: Path)
     # Since test_retrieval.json is missing, retrieval recall must default to 0.0 and fail G5
     assert "FAIL (REJECTED)" in report
     assert "DOES NOT SATISFY" in report
+
+
+def test_score_case_ungrounded_extra_money_fact_even_with_citation():
+    """R2-003: Verify score_case rejects ungrounded extra money facts even if citing a case source."""
+    cid = uuid.uuid4()
+    sid = uuid.uuid4()
+    source_map = {sid: {"original_path": "orders.csv", "media_type": "text/csv"}}
+    gold = {
+        "eval_id": "test-grounding-fail-with-citation",
+        "expected_outcome": "explained",
+        "required_fact_values": {"gross_paise": 5000000},
+    }
+
+    inv_res = _make_res(
+        case_id=cid,
+        outcome="explained",
+        claims=[
+            Claim(
+                text_template="Gross was {{fact:fact_gross}} with extra {{fact:fact_hallucinated}}.",
+                text="Gross was INR 50,000 with extra INR 99,999.99.",
+                fact_ids=["fact_gross", "fact_hallucinated"],
+            )
+        ],
+        selected_facts=[
+            Fact(fact_id="fact_gross", kind="money", value=5000000, value_paise=5000000, currency="INR"),
+            Fact(
+                fact_id="fact_hallucinated",
+                kind="money",
+                value=9999999,
+                value_paise=9999999,
+                currency="INR",
+                citations=[Citation(source_id=sid, locator_id="csv:r1", label="Row 1")],
+            ),
+        ],
+    )
+
+    scores = score_case(gold=gold, inv_res=inv_res, elapsed_s=1.0, tool_calls_used=1, model_turns_used=1, source_map=source_map)
+    assert scores["money"]["pass"] is False
+    assert any("Ungrounded monetary fact 'fact_hallucinated'" in r for r in scores["money"]["failures"])
+
+
+def test_score_case_does_not_synthesize_human_review_pass():
+    """R2-003: Verify score_case does not synthesize a human review pass when unreviewed."""
+    cid = uuid.uuid4()
+    gold = {"eval_id": "test-review-unreviewed", "expected_outcome": "explained"}
+    inv_res = _make_res(case_id=cid, outcome="explained", claims=[Claim(text_template="Valid.", text="Valid.")])
+
+    scores = score_case(gold=gold, inv_res=inv_res, elapsed_s=1.0, tool_calls_used=1, model_turns_used=1)
+    assert scores["review"]["independent_review"] is False
+    assert scores["review"]["support_judgment"] == "unreviewed"
+    assert scores["review"]["outcome_judgment"] == "unreviewed"
+
+
+def test_score_case_claim_unregistered_fact_fails_evidence():
+    """R2-003: Verify claim referencing unregistered fact ID fails evidence."""
+    cid = uuid.uuid4()
+    gold = {"eval_id": "test-claim-unreg", "expected_outcome": "explained"}
+    inv_res = _make_res(
+        case_id=cid,
+        outcome="explained",
+        claims=[Claim(text_template="Text {{fact:fact_missing}}", text="Text", fact_ids=["fact_missing"])],
+        selected_facts=[],
+    )
+
+    scores = score_case(gold=gold, inv_res=inv_res, elapsed_s=1.0, tool_calls_used=1, model_turns_used=1, source_map={})
+    assert scores["evidence"]["pass"] is False
+    assert any("unregistered fact ID 'fact_missing'" in r for r in scores["evidence"]["failures"])
+
 

@@ -244,7 +244,7 @@ async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any
         },
         "tokenizer_identity": {
             "name": settings.tokenizer,
-            "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+            "revision": getattr(settings, "tokenizer_revision", "") or "",
         },
         "embedding_identity": {
             "name": settings.embedding_model,
@@ -293,10 +293,6 @@ async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any
                 break
     except Exception as e:
         logger.warning(f"Failed to query model details from Ollama: {e}")
-
-    # Fallback to known digest if not populated
-    if not report["model_identity"]["digest"]:
-        report["model_identity"]["digest"] = "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41"
 
     # 1. Contract Probes (10 short structured decisions)
     probes = _get_contract_probes()
@@ -405,8 +401,7 @@ async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any
             dummy_text_block += pattern
         near_budget_tokens = count_tokens(SYSTEM_PROMPT + f"Here is the context data:\n{dummy_text_block}\nReconcile order O-00100.", tok)
     else:
-        dummy_text_block = pattern * 75
-        near_budget_tokens = len(dummy_text_block.split())
+        raise RuntimeError("Cannot measure near-budget context tokens: tokenizer failed to load")
 
     near_budget_messages = [
         {"role": "system", "content": SYSTEM_PROMPT},

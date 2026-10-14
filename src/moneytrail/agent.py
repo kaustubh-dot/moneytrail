@@ -771,8 +771,15 @@ async def run_fixed(
                 o_pol = await select_policy(request.case_id, [oid], reader_conn)
                 pol_ev.facts.extend(o_pol.facts)
                 pol_ev.citations.extend(o_pol.citations)
+            except (KeyError, ValueError) as e:
+                logger.info(f"Could not inspect order '{oid}' due to domain lookup error: {e}")
             except Exception as e:
-                logger.info(f"Could not inspect order '{oid}': {e}")
+                await emit("tool_error", {"tool": "inspect_order", "order_id": oid, "error": str(e), "fatal": True})
+                raise LLMError(
+                    "TOOL_EXECUTION_FAILED",
+                    f"Fatal operational error executing inspect_order for '{oid}': {e}",
+                    details={"tool": "inspect_order", "order_id": oid, "error": str(e)},
+                ) from e
 
         if cancel_event and cancel_event.is_set():
             raise asyncio.CancelledError()

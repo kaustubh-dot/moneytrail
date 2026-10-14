@@ -1,5 +1,8 @@
 # MoneyTrail Frozen Evaluation and Verification Report
 
+> [!NOTE]
+> **Historical Baseline Report**: This document records the initial paired frozen evaluation run at Gate G5 baseline commit `554fc4edc4f1e8a300dd27e7d521df695a69a714`, prior to subsequent Independent Implementation Audits and remediation patches.
+
 **Date:** 2026-10-14T04:30:26.177611  
 **Commit:** `554fc4edc4f1e8a300dd27e7d521df695a69a714`  
 **Branch:** `implementation/build`  

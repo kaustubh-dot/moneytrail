@@ -557,12 +557,16 @@ async def reconcile(case_id: uuid.UUID, db: psycopg.AsyncConnection) -> Reconcil
         completeness.get("orders") == "complete"
         and completeness.get("refunds") == "complete"
         and completeness.get("fees") == "complete"
+        and completeness.get("payouts") == "complete"
+        and completeness.get("payout_links") == "complete"
     )
+    expected_net_paise = gross_paise - completed_refunds_paise - assessed_fees_paise
 
     return Reconciliation(
         gross_paise=gross_paise,
         completed_refunds_paise=completed_refunds_paise,
         assessed_fees_paise=assessed_fees_paise,
+        expected_net_paise=expected_net_paise,
         received_allocations_paise=received_allocations_paise,
         documented_pending_paise=documented_pending_paise,
         unexplained_difference_paise=unexplained_difference_paise,
@@ -587,15 +591,16 @@ async def inspect_order(
     Returns OrderEvidence with integer paise and resolving citations.
     """
     async with db.cursor(row_factory=dict_row) as cur:
-        # Fetch case as_of cutoff
+        # Fetch case as_of cutoff and manifest completeness
         await cur.execute(
-            "SELECT as_of FROM cases WHERE case_id = %s;",
+            "SELECT as_of, completeness FROM cases WHERE case_id = %s;",
             [case_id],
         )
         case_row = await cur.fetchone()
         if not case_row:
             raise KeyError(f"Case '{case_id}' not found; order '{order_id}' not found in case")
         as_of = case_row["as_of"]
+        completeness = case_row.get("completeness") or {}
 
         # Fetch order
         await cur.execute(
@@ -753,6 +758,17 @@ async def inspect_order(
     citations.extend(link_cits)
 
     net_cits = [c for c in citations if c in citations[:1] or c in refund_cits or c in fee_cits]
+
+    gross_complete = completeness.get("orders") == "complete"
+    refunds_complete = completeness.get("refunds") == "complete"
+    fees_complete = completeness.get("fees") == "complete"
+    received_complete = (
+        completeness.get("payouts") == "complete"
+        and completeness.get("payout_links") == "complete"
+    )
+    net_complete = gross_complete and refunds_complete and fees_complete
+    pending_complete = net_complete and received_complete
+
     facts = [
         Fact(
             fact_id=f"fact_{order_id}_gross",
@@ -760,7 +776,7 @@ async def inspect_order(
             value=gross_paise,
             value_paise=gross_paise,
             currency="INR",
-            complete=True,
+            complete=gross_complete,
             citations=citations[:1],
             derivation={"order_id": order_id},
         ),
@@ -770,7 +786,7 @@ async def inspect_order(
             value=completed_refunds,
             value_paise=completed_refunds,
             currency="INR",
-            complete=True,
+            complete=refunds_complete,
             citations=refund_cits,
             derivation={
                 "order_id": order_id,
@@ -784,7 +800,7 @@ async def inspect_order(
             value=assessed_fees,
             value_paise=assessed_fees,
             currency="INR",
-            complete=True,
+            complete=fees_complete,
             citations=fee_cits,
             derivation={
                 "order_id": order_id,
@@ -798,7 +814,7 @@ async def inspect_order(
             value=expected_net_paise,
             value_paise=expected_net_paise,
             currency="INR",
-            complete=True,
+            complete=net_complete,
             citations=net_cits,
             derivation={
                 "order_id": order_id,
@@ -817,7 +833,7 @@ async def inspect_order(
                 value=received_paise,
                 value_paise=received_paise,
                 currency="INR",
-                complete=True,
+                complete=received_complete,
                 citations=link_cits,
                 derivation={"order_id": order_id, "effective_links_count": len(link_cits)},
             )
@@ -832,7 +848,7 @@ async def inspect_order(
                 value=pending_amount,
                 value_paise=pending_amount,
                 currency="INR",
-                complete=True,
+                complete=pending_complete,
                 citations=citations[:1],
                 derivation={
                     "order_id": order_id,

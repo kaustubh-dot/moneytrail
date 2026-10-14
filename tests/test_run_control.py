@@ -532,3 +532,28 @@ async def test_exhausted_validation_turns_raises_validation_failed(test_settings
 
         assert exc_info.value.code == "VALIDATION_FAILED"
 
+
+@pytest.mark.asyncio
+async def test_fatal_tool_execution_error_propagates_in_run_fixed(test_settings: Settings):
+    """
+    R2-004 regression test:
+    Verify fatal database error during explicit order inspection in run_fixed
+    raises LLMError('TOOL_EXECUTION_FAILED') instead of being swallowed.
+    """
+    from moneytrail.agent import run_fixed
+    import psycopg
+
+    demo_zip = Path("fixtures/demo.zip")
+    res = await import_bundle(demo_zip, test_settings)
+    case_id = res.case_id
+
+    req = InvestigationRequest(case_id=case_id, question="What about order O-001?", mode="fixed")
+    run_id = uuid.uuid4()
+
+    with patch("moneytrail.agent.inspect_order", side_effect=psycopg.OperationalError("Database connection lost")):
+        with pytest.raises(LLMError) as exc_info:
+            await run_fixed(req, run_id, test_settings)
+
+        assert exc_info.value.code == "TOOL_EXECUTION_FAILED"
+
+

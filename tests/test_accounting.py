@@ -419,10 +419,21 @@ async def test_incomplete_manifest_payouts_unknown_and_pending_unknown(test_sett
         # 1. Does not crash with UnboundLocalError
         rec = await reconcile(res.case_id, reader_conn)
         assert rec.reconciled is False
+        assert rec.expected_net_paise == rec.gross_paise - rec.completed_refunds_paise - rec.assessed_fees_paise
+        assert rec.pending_complete is False
+        assert rec.received_complete is False
 
         # 2. Documented pending must not accumulate verified pending when refund evidence is unknown
         assert rec.documented_pending_paise == 0
         assert any(f.get("code") == "INCOMPLETE_PENDING_EVIDENCE" for f in rec.findings)
+
+        # 3. inspect_order facts must reflect manifest completeness
+        o_ev = await inspect_order(res.case_id, "O-001", reader_conn)
+        facts_by_id = {f.fact_id: f for f in o_ev.facts}
+        assert facts_by_id["fact_O-001_gross"].complete is True
+        assert facts_by_id["fact_O-001_refunds"].complete is False
+        assert facts_by_id["fact_O-001_net"].complete is False
+        assert facts_by_id["fact_O-001_received"].complete is False
     finally:
         await reader_conn.close()
 

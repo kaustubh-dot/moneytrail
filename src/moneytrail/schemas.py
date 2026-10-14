@@ -117,6 +117,7 @@ class Reconciliation(BaseModel):
     gross_paise: int
     completed_refunds_paise: int
     assessed_fees_paise: int
+    expected_net_paise: int = 0
     received_allocations_paise: int
     documented_pending_paise: int
     unexplained_difference_paise: int

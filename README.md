@@ -2,7 +2,7 @@
 
 An evidence-backed merchant payment investigator: explain why recorded sales and received payments differ, using source documents, transaction records, and deterministic calculations.
 
-**Status: Phase 6 (Reproducible delivery and demonstration) complete. Fully verified clean-clone live setup, offline CI, and end-to-end smoke test. Bounded agent achieves 17/18 (94.4%) complete task outcomes with zero monetary errors and zero unauthorized actions against frozen held-out test split. Gate G5 passed; ready for final Gate G6 review.**
+**Status: Active remediation following Independent Implementation Audit and Re-Audit (findings R2-001 through R2-008 remediated). Clean-clone live setup, offline CI, strict freeze manifest validation, and offline regression tests passing. Historical baseline evaluation recorded at commit `554fc4ed`; final acceptance pending independent audit.**
 
 Private repository: [kaustubh-dot/moneytrail](https://github.com/kaustubh-dot/moneytrail).
 

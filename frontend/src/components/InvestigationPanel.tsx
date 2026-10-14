@@ -264,10 +264,21 @@ export const InvestigationPanel: React.FC<InvestigationPanelProps> = ({
                   </div>
                 </div>
                 <div className="recon-item">
-                  <div className="recon-label">Unexplained Diff</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                    <div className="recon-label">Unexplained Diff</div>
+                    {(!recon.reconciled || recon.gross_complete === false || recon.refunds_complete === false || recon.fees_complete === false || recon.received_complete === false || recon.pending_complete === false) && (
+                      <span className="badge badge-amber" style={{ fontSize: '10px', padding: '1px 5px' }}>
+                        Known records only
+                      </span>
+                    )}
+                  </div>
                   <div
                     className={`recon-value ${
-                      recon.unexplained_difference_paise === 0 ? 'diff-zero' : 'diff-nonzero'
+                      recon.unexplained_difference_paise === 0 && recon.reconciled
+                        ? 'diff-zero'
+                        : recon.unexplained_difference_paise === 0
+                        ? 'diff-incomplete'
+                        : 'diff-nonzero'
                     }`}
                   >
                     {formatPaiseAmount(recon.unexplained_difference_paise)}

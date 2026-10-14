@@ -1,14 +1,12 @@
 # MoneyTrail task status and handoff
 
-Updated 2026-10-14. Implementation complete: all 6 phases (Phases 0 through 6) and all gates (G0 through G6) have been implemented, verified, and accepted with full evidence recorded in the ledger below. All 49 tests passing, clean-clone setup verified, live smoke test passed, 17/18 frozen evaluation passed with zero monetary errors and zero unauthorized actions.
+Updated 2026-10-14. Status: Post-Audit Remediation in Progress. The initial implementation (Phases 0 through 6) was completed and benchmarked at baseline commit `554fc4edc4f1e8a300dd27e7d521df695a69a714`. Subsequent Independent Implementation Audits identified defects (F-001 through F-011 and R2-001 through R2-008). Active remediations are in progress and verified across unit tests, freeze integrity, and error propagation. Gate G6 and independent audit acceptance are pending final auditor verification.
 
 [PRD.md](PRD.md) owns vision; [ARCHITECTURE.md](ARCHITECTURE.md) owns contracts; [EVALUATION.md](EVALUATION.md) owns verification; [ROADMAP.md](ROADMAP.md) owns exact ordered instructions. This file is the sole canonical checkbox/status/approval ledger.
 
 ### Current position and next action
 
-Current phase: **Project complete**. All phases (Phase 0 through Phase 6) and all gates (G0 through G6) are complete, accepted, and verified.
-
-All implementation tasks and verification gates have been independently audited and passed.
+Current phase: **Post-Audit Remediation**. Remediating independent audit findings R2-001 through R2-008. All offline tests pass, dataset freeze integrity is fully restored, and operational error handling is strict.
 
 ## Canonical task list
 
@@ -131,6 +129,8 @@ PRD, ARCHITECTURE, EVALUATION, ROADMAP, and README are synchronized with these d
 2026-10-13: the user approved the three pre-lock amendments across the two flagship projects: “Approved but ensure you dont overengineer , overdo and drift apart from the original intended vision”. For this repository the approval covers only the two amendments above and corresponding documentation alignment. No implementation-start or phase approval is recorded; G0 feasibility remains unverified. Append actual phase approvals separately.
 
 2026-10-13: The user explicitly granted batch implementation authorization for Phase 0, Phase 1, Phase 2, Phase 3, Phase 4, Phase 5, and Phase 6 in that order, replacing routine instructions to wait for manual permission between phases. Each phase requires a fresh review-and-fix subagent gate, verification by the coordinating agent, passing mandatory criteria, and recording in TASKS.md before automated continuation. No scope changes, weaker criteria, paid services, destructive operations, or fabricated acceptance are authorized. Final product acceptance remains with the user.
+
+2026-10-14: Independent Implementation Audit and Re-Audit conducted. Findings R2-001 through R2-008 remediated: restored frozen test dataset and freeze manifest protocol, eliminated swallowed tool errors in fixed mode, enforced strict money grounding without citation loopholes in evaluation scorer, qualified incomplete data in UI, expanded freeze validation to all locks and datasets, and corrected documentation. Final verification pending independent audit.
 
 ## Parked work
 
