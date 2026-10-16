@@ -1439,33 +1439,129 @@ def score_case(
         if not matched:
             money_failures.append(f"Required monetary fact '{req_key}' with value {exp_val} paise not matched")
 
-    # Collect known grounded money amounts
-    valid_money_values: set[int] = {0}
-    for v in gold.get("required_fact_values", {}).values():
-        if isinstance(v, int):
-            valid_money_values.add(v)
-    for v in gold.get("allowed_fact_values", []):
-        if isinstance(v, int):
-            valid_money_values.add(v)
+    # Collect known grounded money amounts and semantic expectations
+    semantic_expected: dict[str, set[int]] = {
+        "gross": set(),
+        "refunds": set(),
+        "fees": set(),
+        "net": set(),
+        "received": set(),
+        "pending": set(),
+        "difference": set(),
+    }
+    registered_money_facts: dict[str, int] = {}
+
     if getattr(inv_res, "reconciliation", None):
         rec = inv_res.reconciliation
+        if isinstance(getattr(rec, "gross_paise", None), int):
+            semantic_expected["gross"].add(rec.gross_paise)
+        if isinstance(getattr(rec, "completed_refunds_paise", None), int):
+            semantic_expected["refunds"].add(rec.completed_refunds_paise)
+        if isinstance(getattr(rec, "assessed_fees_paise", None), int):
+            semantic_expected["fees"].add(rec.assessed_fees_paise)
+        if isinstance(getattr(rec, "expected_net_paise", None), int):
+            semantic_expected["net"].add(rec.expected_net_paise)
+        if isinstance(getattr(rec, "received_allocations_paise", None), int):
+            semantic_expected["received"].add(rec.received_allocations_paise)
+        if isinstance(getattr(rec, "documented_pending_paise", None), int):
+            semantic_expected["pending"].add(rec.documented_pending_paise)
+        if isinstance(getattr(rec, "unexplained_difference_paise", None), int):
+            semantic_expected["difference"].add(rec.unexplained_difference_paise)
+
         for rf in getattr(rec, "facts", []):
             rf_val = rf.value_paise if getattr(rf, "value_paise", None) is not None else getattr(rf, "value", None)
             if isinstance(rf_val, int):
-                valid_money_values.add(rf_val)
-        for attr in ("gross_paise", "refunds_paise", "fees_paise", "received_paise", "pending_paise", "difference_paise", "expected_net_paise"):
-            val_attr = getattr(rec, attr, None)
-            if isinstance(val_attr, int):
-                valid_money_values.add(val_attr)
+                registered_money_facts[rf.fact_id] = rf_val
+
+    # Populate from gold expectations
+    for k, v in gold.get("required_fact_values", {}).items():
+        if isinstance(v, int):
+            if k == "gross_paise":
+                semantic_expected["gross"].add(v)
+            elif k == "refunds_paise":
+                semantic_expected["refunds"].add(v)
+            elif k == "fees_paise":
+                semantic_expected["fees"].add(v)
+            elif k == "received_paise":
+                semantic_expected["received"].add(v)
+            elif k == "pending_paise":
+                semantic_expected["pending"].add(v)
+            elif k == "difference_paise":
+                semantic_expected["difference"].add(v)
+
+    gold_allowed = gold.get("allowed_fact_values", [])
+    if isinstance(gold_allowed, dict):
+        for k, v in gold_allowed.items():
+            if isinstance(v, int):
+                if "gross" in k:
+                    semantic_expected["gross"].add(v)
+                elif "refund" in k:
+                    semantic_expected["refunds"].add(v)
+                elif "fee" in k:
+                    semantic_expected["fees"].add(v)
+                elif "received" in k:
+                    semantic_expected["received"].add(v)
+                elif "pending" in k:
+                    semantic_expected["pending"].add(v)
+                elif "difference" in k:
+                    semantic_expected["difference"].add(v)
+                elif "net" in k:
+                    semantic_expected["net"].add(v)
+                registered_money_facts[k] = v
 
     for f in getattr(inv_res, "selected_facts", []):
         if getattr(f, "kind", None) == "money":
             val = f.value_paise if getattr(f, "value_paise", None) is not None else getattr(f, "value", None)
             if not isinstance(val, int):
                 money_failures.append(f"Fact '{f.fact_id}' has non-integer monetary value: {val}")
-            elif val not in valid_money_values:
+                continue
+
+            fid = f.fact_id
+            if fid in registered_money_facts:
+                exp_v = registered_money_facts[fid]
+                if val != exp_v:
+                    money_failures.append(
+                        f"Monetary fact '{fid}' value {val} paise does not match registered derivation {exp_v} paise"
+                    )
+                continue
+
+            component = None
+            if fid == "fact_gross" or fid.endswith("_gross"):
+                component = "gross"
+            elif fid == "fact_refunds" or fid.endswith("_refunds"):
+                component = "refunds"
+            elif fid == "fact_fees" or fid.endswith("_fees"):
+                component = "fees"
+            elif fid == "fact_net" or fid.endswith("_net"):
+                component = "net"
+            elif fid == "fact_received" or fid.endswith("_received"):
+                component = "received"
+            elif fid == "fact_pending" or fid.endswith("_pending"):
+                component = "pending"
+            elif fid == "fact_difference" or fid.endswith("_difference"):
+                component = "difference"
+
+            if component is not None:
+                exp_set = semantic_expected.get(component, set())
+                if exp_set and val not in exp_set:
+                    if isinstance(gold_allowed, list) and val in gold_allowed:
+                        pass
+                    else:
+                        exp_str = ", ".join(str(x) for x in sorted(exp_set))
+                        money_failures.append(
+                            f"Monetary fact '{fid}' value {val} paise does not match expected {component} derivation ({exp_str} paise)"
+                        )
+                elif not exp_set and isinstance(gold_allowed, list) and val in gold_allowed:
+                    pass
+                elif not exp_set and val == 0:
+                    pass
+                elif not exp_set:
+                    money_failures.append(
+                        f"Monetary fact '{fid}' value {val} paise has no expected {component} derivation in gold or reconciliation"
+                    )
+            else:
                 money_failures.append(
-                    f"Ungrounded monetary fact '{f.fact_id}' with value {val} paise not found in gold expectations or grounded evidence"
+                    f"Ungrounded monetary fact '{fid}' with value {val} paise does not correspond to any valid accounting concept or registered derivation"
                 )
 
     for c in getattr(inv_res, "claims", []):
@@ -1665,9 +1761,13 @@ def create_freeze_manifest(output_path: Path, eval_root: Path = Path("evals"), r
             return rev if "@" in rev else name
         return f"{name}@{rev}"
 
+    model_digest = getattr(settings, "model_digest", "")
+    if not model_digest:
+        raise ValueError("Cannot create freeze manifest: model_digest is missing from settings")
+
     pinned = {
         "model": settings.model,
-        "model_digest": getattr(settings, "model_digest", "") or "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41",
+        "model_digest": model_digest,
         "tokenizer": _format_pinned(settings.tokenizer, getattr(settings, "tokenizer_revision", "")),
         "embedding": _format_pinned(settings.embedding_model, getattr(settings, "embedding_revision", "")),
         "reranker": _format_pinned(settings.reranker_model, getattr(settings, "reranker_revision", "")),
@@ -1769,10 +1869,13 @@ def validate_freeze(
     freeze_path: Path,
     eval_root: Path = Path("evals"),
     repo_root: Path | None = None,
+    strict_environment: bool = False,
 ) -> dict[str, Any]:
     """
     Validate that freeze manifest exists and matches current test inputs,
     dependency locks, decision schemas, and all bundle archives.
+    When strict_environment=True, also validates that git HEAD, working tree,
+    system prompt, result schema, model digest, tokenizer, and config match.
     """
     if not freeze_path.exists():
         raise FileNotFoundError(f"Freeze file not found: {freeze_path}")
@@ -1860,6 +1963,95 @@ def validate_freeze(
                 f"Test bundle '{cid}' SHA256 mismatch: expected {exp_b_sha}, got {act_b_sha}"
             )
 
+    if strict_environment:
+        # 6. Git Commit Hash and Clean Working Tree
+        git_res = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo_root, capture_output=True, text=True)
+        if git_res.returncode != 0:
+            raise RuntimeError(f"Strict environment check failed: git rev-parse HEAD failed: {git_res.stderr}")
+        act_commit = git_res.stdout.strip()
+        exp_commit = data.get("commit_hash", "")
+        if act_commit != exp_commit:
+            raise ValueError(
+                f"Strict environment check failed: active git commit '{act_commit}' does not match freeze commit '{exp_commit}'. "
+                "Frozen benchmarks can only be executed on the exact frozen commit."
+            )
+        check_working_tree_clean(repo_root)
+
+        # 7. InvestigationResult Schema and System Prompt Hashes
+        if "investigation_result_schema_sha256" in prompts_and_schemas:
+            from moneytrail.schemas import InvestigationResult
+            i_str = json.dumps(InvestigationResult.model_json_schema(), sort_keys=True)
+            actual_i_hash = hashlib.sha256(i_str.encode("utf-8")).hexdigest()
+            expected_i_hash = prompts_and_schemas["investigation_result_schema_sha256"]
+            if actual_i_hash != expected_i_hash:
+                raise ValueError(
+                    f"Strict environment check failed: InvestigationResult schema SHA256 mismatch against freeze: "
+                    f"expected {expected_i_hash}, got {actual_i_hash}"
+                )
+
+        if "system_prompt_sha256" in prompts_and_schemas:
+            from moneytrail.agent import DECISION_SYSTEM_PROMPT
+            actual_sp_hash = hashlib.sha256(DECISION_SYSTEM_PROMPT.encode("utf-8")).hexdigest()
+            expected_sp_hash = prompts_and_schemas["system_prompt_sha256"]
+            if actual_sp_hash != expected_sp_hash:
+                raise ValueError(
+                    f"Strict environment check failed: System prompt SHA256 mismatch against freeze: "
+                    f"expected {expected_sp_hash}, got {actual_sp_hash}"
+                )
+
+        # 8. Runtime Settings, Pinned Models, and Config
+        from moneytrail.config import Settings
+        try:
+            settings = Settings.from_env()
+        except Exception as e:
+            raise ValueError(f"Strict environment check failed: invalid Settings configuration: {e}") from e
+
+        pinned = data.get("pinned_revisions", {})
+        if pinned.get("model") and settings.model != pinned["model"]:
+            raise ValueError(
+                f"Strict environment check failed: model mismatch: expected {pinned['model']}, got {settings.model}"
+            )
+        if pinned.get("model_digest") and settings.model_digest != pinned["model_digest"]:
+            raise ValueError(
+                f"Strict environment check failed: model_digest mismatch: expected {pinned['model_digest']}, got {settings.model_digest}"
+            )
+        if pinned.get("tokenizer"):
+            exp_tok = pinned["tokenizer"]
+            if settings.tokenizer_revision and settings.tokenizer_revision not in exp_tok:
+                raise ValueError(
+                    f"Strict environment check failed: tokenizer revision mismatch: expected {exp_tok}, got {settings.tokenizer_revision}"
+                )
+        if pinned.get("embedding"):
+            exp_emb = pinned["embedding"]
+            if settings.embedding_revision and settings.embedding_revision not in exp_emb:
+                raise ValueError(
+                    f"Strict environment check failed: embedding revision mismatch: expected {exp_emb}, got {settings.embedding_revision}"
+                )
+        if pinned.get("reranker"):
+            exp_rer = pinned["reranker"]
+            if settings.reranker_revision and settings.reranker_revision not in exp_rer:
+                raise ValueError(
+                    f"Strict environment check failed: reranker revision mismatch: expected {exp_rer}, got {settings.reranker_revision}"
+                )
+
+        cfg = data.get("config", {})
+        if "max_tool_calls" in cfg and settings.max_tool_calls != cfg["max_tool_calls"]:
+            raise ValueError(
+                f"Strict environment check failed: max_tool_calls mismatch: expected {cfg['max_tool_calls']}, got {settings.max_tool_calls}"
+            )
+        if "max_model_turns" in cfg and settings.max_model_turns != cfg["max_model_turns"]:
+            raise ValueError(
+                f"Strict environment check failed: max_model_turns mismatch: expected {cfg['max_model_turns']}, got {settings.max_model_turns}"
+            )
+        if "model_timeout_seconds" in cfg and settings.model_timeout_seconds != cfg["model_timeout_seconds"]:
+            raise ValueError(
+                f"Strict environment check failed: model_timeout_seconds mismatch: expected {cfg['model_timeout_seconds']}, got {settings.model_timeout_seconds}"
+            )
+        if "run_timeout_seconds" in cfg and settings.run_timeout_seconds != cfg["run_timeout_seconds"]:
+            raise ValueError(
+                f"Strict environment check failed: run_timeout_seconds mismatch: expected {cfg['run_timeout_seconds']}, got {settings.run_timeout_seconds}"
+            )
+
     return data
 
 
@@ -1868,6 +2060,7 @@ async def run_paired_async(
     split: str,
     freeze_path: Path,
     output_path: Path,
+    reviews_path: Path | None = None,
 ) -> dict[str, Any]:
     """
     Execute paired fixed and agent evaluations across the split with alternating mode order.
@@ -1881,8 +2074,12 @@ async def run_paired_async(
     from moneytrail.schemas import InvestigationRequest
 
     settings = Settings.from_env()
-    freeze_data = validate_freeze(freeze_path, eval_root)
+    freeze_data = validate_freeze(freeze_path, eval_root, strict_environment=True)
     freeze_sha256 = compute_sha256(freeze_path)
+
+    external_reviews: dict[str, Any] = {}
+    if reviews_path and reviews_path.exists():
+        external_reviews = json.loads(reviews_path.read_text(encoding="utf-8"))
 
     # 1. Warmup model on demonstration bundle (excluded from latency metrics)
     print("Warming up model on demonstration bundle...")
@@ -1971,6 +2168,8 @@ async def run_paired_async(
             # Score run
             tool_calls_used = inv_res.budget_summary.get("tool_calls_used", 1)
             model_turns_used = inv_res.budget_summary.get("model_turns_used", 1)
+            case_rev = external_reviews.get(eval_id, {})
+            mode_rev = case_rev.get(mode) if isinstance(case_rev, dict) else None
             scores = score_case(
                 gold=item,
                 inv_res=inv_res,
@@ -1978,6 +2177,7 @@ async def run_paired_async(
                 tool_calls_used=tool_calls_used,
                 model_turns_used=model_turns_used,
                 source_map=source_map,
+                reviewer_review=mode_rev,
             )
 
             runs[eval_id][mode] = {
@@ -2137,6 +2337,13 @@ def generate_final_report(
     pass_ret_cand = ret_cand_recall >= 0.95
     pass_ret_doc = ret_doc_recall >= 0.90
 
+    pass_reviews = all(
+        r["agent"].get("review", {}).get("independent_review") is True
+        and r["agent"].get("review", {}).get("support_judgment") == "pass"
+        and r["agent"].get("review", {}).get("outcome_judgment") == "pass"
+        for r in runs.values()
+    )
+
     g5_verdict = (
         pass_outcomes
         and pass_families
@@ -2145,6 +2352,7 @@ def generate_final_report(
         and pass_deadline
         and pass_ret_cand
         and pass_ret_doc
+        and pass_reviews
     )
 
     md = []
@@ -2174,6 +2382,12 @@ def generate_final_report(
     md.append(f"| Standalone Document Recall @ 6 | >= 0.90 | **{ret_doc_recall:.4f}** | {'PASS' if pass_ret_doc else 'FAIL'} |")
     md.append(f"| Hard Run Deadline (<= 240s) | 100% within 240s | **Max {max(agent_latencies):.2f}s** | {'PASS' if pass_deadline else 'FAIL'} |")
     md.append(f"| Latency Target (p95 <= 120s) | p95 <= 120s | **p95 {agent_p95:.2f}s** | {'PASS' if agent_p95 <= 120.0 else 'OBSERVED'} |")
+    md.append(f"| Independent Evaluator Review | 18/18 verified | **{'18/18 PASSED' if pass_reviews else 'PENDING / INCOMPLETE'}** | {'PASS' if pass_reviews else 'FAIL'} |")
+    if not pass_reviews:
+        md.append("")
+        md.append("> [!WARNING]")
+        md.append("> **Independent Evaluator Review Incomplete**: Gate G5 acceptance strictly requires independent human/rubric evaluator review (`independent_review=True`, `support_judgment='pass'`, `outcome_judgment='pass'`) across all cases. Automated scoring alone cannot grant Gate G5 acceptance.")
+
     md.append("")
     md.append("## Paired Comparison: Fixed Baseline vs. Bounded Agent")
     md.append("")

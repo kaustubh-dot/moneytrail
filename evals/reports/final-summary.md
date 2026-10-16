@@ -1,7 +1,14 @@
 # MoneyTrail Frozen Evaluation and Verification Report
 
-> [!NOTE]
-> **Historical Baseline Report**: This document records the initial paired frozen evaluation run at Gate G5 baseline commit `554fc4edc4f1e8a300dd27e7d521df695a69a714`, prior to subsequent Independent Implementation Audits and remediation patches.
+> [!WARNING]
+> **Historical Baseline & Audit Status**:
+> This document records the initial paired frozen evaluation run at historical baseline commit `554fc4edc4f1e8a300dd27e7d521df695a69a714`.
+> Subsequent Independent Implementation Audits (Rounds 1–3) challenged the automated scorer's original verdict:
+> 1. The original automated run lacked mandatory independent human evaluator rubric reviews (`independent_review=True`), which are now strictly required for Gate G5 acceptance.
+> 2. The original scorer used flat integer set membership for money checks rather than verifying semantic fact derivations.
+> 3. The historical benchmark reflects the pre-audit test set and cannot serve as an acceptance claim for subsequent remediations without a fresh independent re-audit.
+> 
+> Consequently, **Gate G5 acceptance for the current codebase remains PENDING independent re-audit**. This report is retained as historical evidence of the initial automated baseline run.
 
 **Date:** 2026-10-14T04:30:26.177611  
 **Commit:** `554fc4edc4f1e8a300dd27e7d521df695a69a714`  
@@ -12,7 +19,7 @@
 
 ## Executive Summary and Gate G5 Verdict
 
-**Gate G5 Status:** **PASS (ACCEPTED)**
+**Gate G5 Status (Historical Baseline):** **PASS (ACCEPTED under initial automated criteria; acceptance on current codebase pending independent re-audit)**
 
 | Acceptance Criterion | Target Gate | Observed Value | Status |
 | :--- | :--- | :--- | :--- |

@@ -130,7 +130,15 @@ PRD, ARCHITECTURE, EVALUATION, ROADMAP, and README are synchronized with these d
 
 2026-10-13: The user explicitly granted batch implementation authorization for Phase 0, Phase 1, Phase 2, Phase 3, Phase 4, Phase 5, and Phase 6 in that order, replacing routine instructions to wait for manual permission between phases. Each phase requires a fresh review-and-fix subagent gate, verification by the coordinating agent, passing mandatory criteria, and recording in TASKS.md before automated continuation. No scope changes, weaker criteria, paid services, destructive operations, or fabricated acceptance are authorized. Final product acceptance remains with the user.
 
-2026-10-14: Independent Implementation Audit and Re-Audit conducted. Findings R2-001 through R2-008 remediated: restored frozen test dataset and freeze manifest protocol, eliminated swallowed tool errors in fixed mode, enforced strict money grounding without citation loopholes in evaluation scorer, qualified incomplete data in UI, expanded freeze validation to all locks and datasets, and corrected documentation. Final verification pending independent audit.
+2026-10-14: Independent Implementation Audit and Re-Audit conducted. Findings R2-001 through R2-008 remediated: restored frozen test dataset and freeze manifest protocol, eliminated swallowed tool errors in fixed mode, enforced strict money grounding without citation loopholes in evaluation scorer, qualified incomplete data in UI, expanded freeze validation to all locks and datasets, and corrected documentation.
+
+2026-10-14: Independent Implementation Re-Audit Round 3 conducted. Findings R3-001 through R3-006 remediated:
+- R3-001: Strict runtime freeze binding implemented in `validate_freeze(strict_environment=True)` enforcing git commit HEAD, clean working tree, prompt/schema hashes, model digest, tokenizer, embedding/reranker pins, and runtime config. CI dataset integrity validation preserved under `strict_environment=False`.
+- R3-002: Independent human/rubric review strictly required for Gate G5 acceptance verdict in `generate_final_report()`. Semantic monetary fact verification enforced in `score_case()` preventing numeric set collisions or fact spoofing. External review loading supported in `run_paired_async()`.
+- R3-003: Maintained honest portfolio posture: historical evaluation baseline at commit `554fc4ed` retained for reference; current Gate G5 and G6 acceptance marked as pending fresh independent re-audit.
+- R3-004: Cleaned inference qualification in `src/moneytrail/llm.py` to dynamically query architecture/quantization and require non-empty measured model digest for feasibility gate; eliminated hardcoded fallback in `create_freeze_manifest()`.
+- R3-005: Corrected UI Unexplained Diff badge condition in `InvestigationPanel.tsx` to check completeness flags only, preventing false "Known records only" badges on genuine discrepancies with complete data.
+- R3-006: Corrected documentation drift across `README.md` (68-test suite, strict citation validation), `TASKS.md`, and `evals/reports/final-summary.md` (audit challenges disclaimer). Full 68 offline regression tests passing. Final product acceptance pending independent re-audit.
 
 ## Parked work
 

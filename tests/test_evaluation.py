@@ -1,5 +1,6 @@
 """Unit tests for Phase 5 evaluation scoring, validation, and freeze functions."""
 
+import json
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -480,5 +481,135 @@ def test_score_case_claim_unregistered_fact_fails_evidence():
     scores = score_case(gold=gold, inv_res=inv_res, elapsed_s=1.0, tool_calls_used=1, model_turns_used=1, source_map={})
     assert scores["evidence"]["pass"] is False
     assert any("unregistered fact ID 'fact_missing'" in r for r in scores["evidence"]["failures"])
+
+
+def test_strict_environment_freeze_validation_fails_on_commit_mismatch(tmp_path: Path):
+    """R3-001: Verify validate_freeze(strict_environment=True) refuses if active git HEAD != freeze commit."""
+    from moneytrail.evaluation import validate_freeze
+    freeze_file = tmp_path / "freeze.json"
+    fake_data = {
+        "commit_hash": "deadbeef1234567890abcdef1234567890abcdef",
+        "dependency_locks": {},
+        "prompts_and_schemas": {},
+        "datasets": {},
+    }
+    freeze_file.write_text(json.dumps(fake_data), encoding="utf-8")
+
+    # strict_environment=False passes (locks and datasets empty)
+    res = validate_freeze(freeze_file, strict_environment=False, repo_root=Path("."))
+    assert res["commit_hash"] == fake_data["commit_hash"]
+
+    # strict_environment=True must raise ValueError refusing run
+    with pytest.raises(ValueError) as exc_info:
+        validate_freeze(freeze_file, strict_environment=True, repo_root=Path("."))
+    assert "Strict environment check failed" in str(exc_info.value)
+    assert "does not match freeze commit" in str(exc_info.value)
+
+
+def test_score_case_semantic_money_collision_rejected():
+    """R3-002: Verify score_case rejects facts that borrow valid numeric values for the wrong semantic field."""
+    cid = uuid.uuid4()
+    gold = {
+        "eval_id": "test-semantic-collision",
+        "expected_outcome": "explained",
+        "required_fact_values": {"gross_paise": 8000000, "refunds_paise": 1000000},
+    }
+
+    inv_res = _make_res(
+        case_id=cid,
+        outcome="explained",
+        claims=[
+            Claim(
+                text_template="Gross was {{fact:fact_gross}} and refunds were {{fact:fact_refunds}}.",
+                text="text",
+                fact_ids=["fact_gross", "fact_refunds"],
+            )
+        ],
+        selected_facts=[
+            Fact(fact_id="fact_gross", kind="money", value=1000000, value_paise=1000000, currency="INR"),
+            Fact(fact_id="fact_refunds", kind="money", value=8000000, value_paise=8000000, currency="INR"),
+        ],
+    )
+
+    scores = score_case(gold=gold, inv_res=inv_res, elapsed_s=1.0, tool_calls_used=1, model_turns_used=1)
+    assert scores["money"]["pass"] is False
+    assert any("does not match expected gross derivation" in r for r in scores["money"]["failures"])
+    assert any("does not match expected refunds derivation" in r for r in scores["money"]["failures"])
+
+
+def test_generate_final_report_fails_closed_on_unreviewed_cases(tmp_path: Path):
+    """R3-002: Verify generate_final_report requires independent_review=True and passing judgments for G5."""
+    eval_output = tmp_path / "test_paired.json"
+    summary_output = tmp_path / "summary.md"
+    freeze_file = tmp_path / "freeze.json"
+    retrieval_file = tmp_path / "test_retrieval.json"
+
+    retrieval_data = {
+        "total_questions": 18,
+        "eligible_questions": 17,
+        "candidate_recall_top20": {"reranked": {"pooled": 1.0}},
+        "final_doc_recall_top6": {"reranked": {"pooled": 1.0}},
+    }
+    retrieval_file.write_text(json.dumps(retrieval_data), encoding="utf-8")
+
+    runs = {}
+    for i in range(1, 19):
+        fam = "A" if i <= 6 else ("B" if i <= 12 else "C")
+        runs[f"test-{i}"] = {
+            "eval_id": f"test-{i}",
+            "family": fam,
+            "expected_outcome": "explained",
+            "fixed": {
+                "outcome": "explained",
+                "elapsed_s": 1.0,
+                "budget_summary": {"tool_calls_used": 1, "model_turns_used": 1},
+                "scores": {"overall": True},
+                "review": {"support_judgment": "pass", "outcome_judgment": "pass", "independent_review": False},
+            },
+            "agent": {
+                "outcome": "explained",
+                "elapsed_s": 2.0,
+                "budget_summary": {"tool_calls_used": 2, "model_turns_used": 1},
+                "scores": {
+                    "overall": True,
+                    "money": {"pass": True, "failures": []},
+                    "boundary": {"pass": True, "failures": []},
+                    "execution": {"pass": True, "failures": []},
+                    "evidence": {"pass": True, "failures": []},
+                    "outcome": {"pass": True, "failures": []},
+                    "failure_reasons": [],
+                },
+                "review": {"support_judgment": "pass", "outcome_judgment": "pass", "independent_review": False},
+            },
+            "comparison": {"winner": "agent"},
+        }
+
+    eval_data = {
+        "split": "test",
+        "freeze_commit": "abcdef123456",
+        "runs": runs,
+    }
+    eval_output.write_text(json.dumps(eval_data), encoding="utf-8")
+
+    freeze_data = {
+        "commit_hash": "abcdef123456",
+        "pinned_revisions": {"model": "qwen3:8b", "model_digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41"},
+        "hardware": {"cpu": "AMD", "ram": "32GB"},
+    }
+    freeze_file.write_text(json.dumps(freeze_data), encoding="utf-8")
+
+    report = generate_final_report(eval_output, summary_output, freeze_path=freeze_file)
+    assert "FAIL (REJECTED)" in report
+    assert "Independent Evaluator Review Incomplete" in report
+
+    for i in range(1, 19):
+        runs[f"test-{i}"]["agent"]["review"]["independent_review"] = True
+    eval_data["runs"] = runs
+    eval_output.write_text(json.dumps(eval_data), encoding="utf-8")
+
+    report_approved = generate_final_report(eval_output, summary_output, freeze_path=freeze_file)
+    assert "PASS (ACCEPTED)" in report_approved
+    assert "18/18 PASSED" in report_approved
+
 
 

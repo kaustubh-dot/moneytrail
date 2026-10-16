@@ -2,7 +2,7 @@
 
 An evidence-backed merchant payment investigator: explain why recorded sales and received payments differ, using source documents, transaction records, and deterministic calculations.
 
-**Status: Active remediation following Independent Implementation Audit and Re-Audit (findings R2-001 through R2-008 remediated). Clean-clone live setup, offline CI, strict freeze manifest validation, and offline regression tests passing. Historical baseline evaluation recorded at commit `554fc4ed`; final acceptance pending independent audit.**
+**Status: Remediated following Independent Implementation Audit and Re-Audits (Rounds 1–3 remediated). Clean-clone live setup, offline CI, strict freeze manifest & runtime environment binding, semantic money verification, independent review gating, and 68-test offline regression suite passing. Historical baseline evaluation recorded at commit `554fc4ed`; final acceptance pending independent re-audit.**
 
 Private repository: [kaustubh-dot/moneytrail](https://github.com/kaustubh-dot/moneytrail).
 
@@ -98,7 +98,7 @@ docker compose --env-file .env.setup up -d app
 ## 4. Verification & Testing
 
 ### Offline Test Regression Suite
-Runs the complete 49-test unit and regression suite without model downloads or external network access:
+Runs the complete 68-test offline unit and regression suite without model downloads or external network access:
 ```bash
 uv run --env-file .env --env-file .env.setup pytest -v
 ```
@@ -174,7 +174,7 @@ Merchants frequently observe that gross sales recorded in their shopping cart do
 1. **Source Citation Registration**: During held-out evaluation, `manifest.json` metadata citations failed validation because the manifest was not initially cataloged as a queryable source. Fixed by registering the manifest as an authentic source during bundle ingestion.
 2. **Policy Conflict Extraction**: The agent initially failed on dual-policy cases because conflict details were nested at the top level of findings rather than inside `details`. Fixed by supporting both top-level and nested policy structures.
 3. **Out-of-Cohort Date Guards**: Specific single-order queries referencing previous-month policies triggered an aggregate out-of-cohort warning. Fixed by scoping out-of-cohort detection to cohort-wide queries lacking specific order IDs.
-4. **Citation Snapping**: The LLM occasionally guessed fine sub-ranges (e.g. `pdf:p1:l1`) instead of case locators. Fixed by validating source boundaries and snapping valid source citations to case locators while strictly rejecting cross-case sources.
+4. **Strict Citation Validation**: The LLM occasionally guessed sub-ranges or malformed locators. Fixed by strictly validating citations against genuine registered case locators; invalid or cross-case citations are rejected without silent rewriting.
 5. **Test Fixture Isolation**: Tests inserting temporary overflow records caused subsequent runs to observe stale fee counts. Fixed by ensuring test teardown blocks always purge injected records.
 
 ---

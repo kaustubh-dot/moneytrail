@@ -284,7 +284,12 @@ async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any
     try:
         model_show = await client.show(settings.model)
         details = model_show.get("details", {})
-        report["model_identity"]["quantization"] = details.get("quantization_level", "Q4_K_M")
+        if details.get("quantization_level"):
+            report["model_identity"]["quantization"] = details["quantization_level"]
+        if details.get("family"):
+            report["model_identity"]["architecture"] = details["family"]
+        if details.get("parameter_size"):
+            report["model_identity"]["parameters"] = details["parameter_size"]
         # Query tags for full digest
         tags = await client.list()
         for m in tags.get("models", []):
@@ -445,11 +450,12 @@ async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any
         print(f"  Offline provider produced expected code: {e.code}")
 
     # Determine feasibility gate:
-    # Require 10/10 parsed, 0 illegal dispatches, at least 8/10 passed, offline check passed, fits in 8192 context
+    # Require 10/10 parsed, 0 illegal dispatches, at least 8/10 passed, offline check passed, fits in 8192 context, non-empty measured digest
     if (
         parsed_count == 10
         and illegal_dispatches == 0
         and passed_count >= 8
+        and bool(report["model_identity"].get("digest"))
         and report["offline_provider_check"]["passed"]
         and report["performance_probes"]["fits_in_8192_context"]
     ):
