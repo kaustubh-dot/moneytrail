@@ -584,19 +584,26 @@ def test_generate_final_report_fails_closed_on_unreviewed_cases(tmp_path: Path):
             "comparison": {"winner": "agent"},
         }
 
-    eval_data = {
-        "split": "test",
-        "freeze_commit": "abcdef123456",
-        "runs": runs,
-    }
-    eval_output.write_text(json.dumps(eval_data), encoding="utf-8")
-
     freeze_data = {
         "commit_hash": "abcdef123456",
         "pinned_revisions": {"model": "qwen3:8b", "model_digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41"},
         "hardware": {"cpu": "AMD", "ram": "32GB"},
     }
     freeze_file.write_text(json.dumps(freeze_data), encoding="utf-8")
+    from moneytrail.evaluation import compute_sha256
+    freeze_sha = compute_sha256(freeze_file)
+
+    retrieval_data["freeze_commit"] = "abcdef123456"
+    retrieval_data["freeze_sha256"] = freeze_sha
+    retrieval_file.write_text(json.dumps(retrieval_data), encoding="utf-8")
+
+    eval_data = {
+        "split": "test",
+        "freeze_commit": "abcdef123456",
+        "freeze_sha256": freeze_sha,
+        "runs": runs,
+    }
+    eval_output.write_text(json.dumps(eval_data), encoding="utf-8")
 
     report = generate_final_report(eval_output, summary_output, freeze_path=freeze_file)
     assert "FAIL (REJECTED)" in report
@@ -723,14 +730,25 @@ def test_generate_final_report_freeze_sha_and_retrieval_mismatch(tmp_path: Path)
 
 
 def test_generate_final_report_reviews_sidecar(tmp_path: Path):
-    """R5-002: Verify generate_final_report applies reviews sidecar if provided."""
+    """R5-002 & R6-002: Verify generate_final_report applies reviews sidecar bound by final_sha256."""
     eval_output = tmp_path / "test_paired.json"
     summary_output = tmp_path / "summary.md"
     freeze_file = tmp_path / "freeze.json"
     retrieval_file = tmp_path / "test_retrieval.json"
     reviews_file = tmp_path / "reviews.json"
 
+    freeze_data = {
+        "commit_hash": "abcdef123456",
+        "pinned_revisions": {"model": "qwen3:8b", "model_digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41"},
+        "hardware": {"cpu": "AMD", "ram": "32GB"},
+    }
+    freeze_file.write_text(json.dumps(freeze_data), encoding="utf-8")
+    from moneytrail.evaluation import compute_sha256
+    freeze_sha = compute_sha256(freeze_file)
+
     retrieval_data = {
+        "freeze_commit": "abcdef123456",
+        "freeze_sha256": freeze_sha,
         "total_questions": 18,
         "eligible_questions": 17,
         "candidate_recall_top20": {"reranked": {"pooled": 1.0}},
@@ -780,29 +798,138 @@ def test_generate_final_report_reviews_sidecar(tmp_path: Path):
             }
         }
 
-    freeze_data = {
-        "commit_hash": "abcdef123456",
-        "pinned_revisions": {"model": "qwen3:8b", "model_digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41"},
-        "hardware": {"cpu": "AMD", "ram": "32GB"},
-    }
-    freeze_file.write_text(json.dumps(freeze_data), encoding="utf-8")
-
     eval_data = {
         "split": "test",
         "freeze_commit": "abcdef123456",
+        "freeze_sha256": freeze_sha,
         "runs": runs,
     }
     eval_output.write_text(json.dumps(eval_data), encoding="utf-8")
-    reviews_file.write_text(json.dumps(reviews), encoding="utf-8")
+
+    final_sha = compute_sha256(eval_output)
+    sidecar_data = {
+        "final_sha256": final_sha,
+        "freeze_commit": "abcdef123456",
+        "reviews": reviews,
+    }
+    reviews_file.write_text(json.dumps(sidecar_data), encoding="utf-8")
 
     # Without reviews: fails G5
     report_unreviewed = generate_final_report(eval_output, summary_output, freeze_path=freeze_file)
     assert "FAIL (REJECTED)" in report_unreviewed
 
-    # With reviews sidecar: passes G5
+    # With reviews sidecar bound to final_sha256: passes G5
     report_reviewed = generate_final_report(eval_output, summary_output, freeze_path=freeze_file, reviews_path=reviews_file)
     assert "PASS (ACCEPTED)" in report_reviewed
     assert "18/18 PASSED" in report_reviewed
+
+
+def test_generate_final_report_frozen_retrieval_missing_freeze_metadata(tmp_path: Path):
+    """R6-001: Verify generate_final_report fails closed when retrieval report lacks freeze metadata."""
+    eval_output = tmp_path / "test_paired.json"
+    summary_output = tmp_path / "summary.md"
+    freeze_file = tmp_path / "freeze.json"
+    retrieval_file = tmp_path / "test_retrieval.json"
+
+    freeze_data = {
+        "commit_hash": "commit_abc",
+        "pinned_revisions": {"model": "qwen3:8b", "model_digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41"},
+        "hardware": {"cpu": "AMD", "ram": "32GB"},
+    }
+    freeze_file.write_text(json.dumps(freeze_data), encoding="utf-8")
+    from moneytrail.evaluation import compute_sha256
+    real_freeze_sha = compute_sha256(freeze_file)
+
+    eval_data = {
+        "split": "test",
+        "freeze_commit": "commit_abc",
+        "freeze_sha256": real_freeze_sha,
+        "runs": {},
+    }
+    eval_output.write_text(json.dumps(eval_data), encoding="utf-8")
+
+    # 1. Retrieval report missing freeze_commit entirely
+    retrieval_data = {
+        "total_questions": 18,
+        "eligible_questions": 17,
+        "candidate_recall_top20": {"reranked": {"pooled": 1.0}},
+        "final_doc_recall_top6": {"reranked": {"pooled": 1.0}},
+    }
+    retrieval_file.write_text(json.dumps(retrieval_data), encoding="utf-8")
+    with pytest.raises(ValueError, match="missing 'freeze_commit' metadata"):
+        generate_final_report(eval_output, summary_output, freeze_path=freeze_file)
+
+    # 2. Retrieval report missing freeze_sha256
+    retrieval_data["freeze_commit"] = "commit_abc"
+    retrieval_file.write_text(json.dumps(retrieval_data), encoding="utf-8")
+    with pytest.raises(ValueError, match="missing 'freeze_sha256' metadata"):
+        generate_final_report(eval_output, summary_output, freeze_path=freeze_file)
+
+
+def test_generate_final_report_reviews_sidecar_missing_and_mismatched_identity(tmp_path: Path):
+    """R6-002: Verify generate_final_report enforces final_sha256 and freeze_commit binding on review sidecar."""
+    eval_output = tmp_path / "test_paired.json"
+    summary_output = tmp_path / "summary.md"
+    freeze_file = tmp_path / "freeze.json"
+    retrieval_file = tmp_path / "test_retrieval.json"
+    reviews_file = tmp_path / "reviews.json"
+
+    freeze_data = {
+        "commit_hash": "commit_xyz",
+        "pinned_revisions": {"model": "qwen3:8b", "model_digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41"},
+        "hardware": {"cpu": "AMD", "ram": "32GB"},
+    }
+    freeze_file.write_text(json.dumps(freeze_data), encoding="utf-8")
+    from moneytrail.evaluation import compute_sha256
+    real_freeze_sha = compute_sha256(freeze_file)
+
+    retrieval_data = {
+        "freeze_commit": "commit_xyz",
+        "freeze_sha256": real_freeze_sha,
+        "total_questions": 18,
+        "eligible_questions": 17,
+        "candidate_recall_top20": {"reranked": {"pooled": 1.0}},
+        "final_doc_recall_top6": {"reranked": {"pooled": 1.0}},
+    }
+    retrieval_file.write_text(json.dumps(retrieval_data), encoding="utf-8")
+
+    eval_data = {
+        "split": "test",
+        "freeze_commit": "commit_xyz",
+        "freeze_sha256": real_freeze_sha,
+        "runs": {},
+    }
+    eval_output.write_text(json.dumps(eval_data), encoding="utf-8")
+
+    # 1. Reviews sidecar missing final_sha256
+    sidecar_missing_sha = {
+        "freeze_commit": "commit_xyz",
+        "reviews": {},
+    }
+    reviews_file.write_text(json.dumps(sidecar_missing_sha), encoding="utf-8")
+    with pytest.raises(ValueError, match="missing required 'final_sha256'"):
+        generate_final_report(eval_output, summary_output, freeze_path=freeze_file, reviews_path=reviews_file)
+
+    # 2. Reviews sidecar with mismatched final_sha256
+    sidecar_mismatched_sha = {
+        "final_sha256": "wrong_sha256_hash",
+        "freeze_commit": "commit_xyz",
+        "reviews": {},
+    }
+    reviews_file.write_text(json.dumps(sidecar_mismatched_sha), encoding="utf-8")
+    with pytest.raises(ValueError, match="final_sha256 mismatch"):
+        generate_final_report(eval_output, summary_output, freeze_path=freeze_file, reviews_path=reviews_file)
+
+    # 3. Reviews sidecar with mismatched freeze_commit
+    actual_final_sha = compute_sha256(eval_output)
+    sidecar_mismatched_commit = {
+        "final_sha256": actual_final_sha,
+        "freeze_commit": "wrong_commit_hash",
+        "reviews": {},
+    }
+    reviews_file.write_text(json.dumps(sidecar_mismatched_commit), encoding="utf-8")
+    with pytest.raises(ValueError, match="freeze_commit mismatch"):
+        generate_final_report(eval_output, summary_output, freeze_path=freeze_file, reviews_path=reviews_file)
 
 
 

@@ -2300,12 +2300,36 @@ def generate_final_report(
 
     runs = data["runs"]
 
-    # Apply independent reviews sidecar if provided (R5-002)
-    if reviews_path is not None and reviews_path.exists():
+    # Apply independent reviews sidecar if provided (R5-002, R6-002)
+    if reviews_path is not None:
+        if not reviews_path.exists():
+            raise FileNotFoundError(f"Review sidecar file not found: {reviews_path}")
         reviews_data = json.loads(reviews_path.read_text(encoding="utf-8"))
+        sidecar_final_sha = reviews_data.get("final_sha256")
+        if not sidecar_final_sha:
+            raise ValueError(
+                f"Review sidecar {reviews_path.name} is missing required 'final_sha256' binding to evaluated final.json"
+            )
+        actual_final_sha = compute_sha256(input_path)
+        if sidecar_final_sha != actual_final_sha:
+            raise ValueError(
+                f"Review sidecar final_sha256 mismatch against {input_path.name}: "
+                f"expected {sidecar_final_sha}, got {actual_final_sha}"
+            )
+        sidecar_commit = reviews_data.get("freeze_commit")
+        if sidecar_commit and data.get("freeze_commit") and sidecar_commit != data["freeze_commit"]:
+            raise ValueError(
+                f"Review sidecar freeze_commit mismatch against {input_path.name}: "
+                f"expected {sidecar_commit}, got {data['freeze_commit']}"
+            )
+
+        reviews_map = reviews_data.get("reviews")
+        if not isinstance(reviews_map, dict):
+            reviews_map = {k: v for k, v in reviews_data.items() if k not in ("final_sha256", "freeze_commit")}
+
         for eid, r in runs.items():
-            if eid in reviews_data:
-                rev_entry = reviews_data[eid]
+            if eid in reviews_map:
+                rev_entry = reviews_map[eid]
                 if "agent" in rev_entry and isinstance(rev_entry["agent"], dict):
                     rev_entry = rev_entry["agent"]
                 r["agent"]["review"] = {
@@ -2363,14 +2387,24 @@ def generate_final_report(
     retrieval_data = {}
     if retrieval_file.exists():
         retrieval_data = json.loads(retrieval_file.read_text(encoding="utf-8"))
-        if retrieval_data.get("freeze_commit") and data.get("freeze_commit"):
-            if retrieval_data["freeze_commit"] != data["freeze_commit"]:
+        has_freeze_identity = bool(data.get("freeze_commit") or data.get("freeze_sha256"))
+        if has_freeze_identity:
+            if not retrieval_data.get("freeze_commit"):
+                raise ValueError(
+                    f"Retrieval evaluation report {retrieval_file.name} is missing 'freeze_commit' "
+                    f"metadata required for frozen final evaluation"
+                )
+            if not retrieval_data.get("freeze_sha256"):
+                raise ValueError(
+                    f"Retrieval evaluation report {retrieval_file.name} is missing 'freeze_sha256' "
+                    f"metadata required for frozen final evaluation"
+                )
+            if data.get("freeze_commit") and retrieval_data["freeze_commit"] != data["freeze_commit"]:
                 raise ValueError(
                     f"Freeze commit mismatch between paired run ({data.get('freeze_commit')}) "
                     f"and retrieval evaluation ({retrieval_data.get('freeze_commit')})"
                 )
-        if retrieval_data.get("freeze_sha256") and data.get("freeze_sha256"):
-            if retrieval_data["freeze_sha256"] != data["freeze_sha256"]:
+            if data.get("freeze_sha256") and retrieval_data["freeze_sha256"] != data["freeze_sha256"]:
                 raise ValueError(
                     f"Freeze SHA256 mismatch between paired run ({data.get('freeze_sha256')}) "
                     f"and retrieval evaluation ({retrieval_data.get('freeze_sha256')})"
