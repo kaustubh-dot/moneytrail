@@ -2,7 +2,7 @@
 
 An evidence-backed merchant payment investigator: explain why recorded sales and received payments differ, using source documents, transaction records, and deterministic calculations.
 
-**Status: Remediated following Independent Implementation Audit and Re-Audits (Rounds 1–3 remediated). Clean-clone live setup, offline CI, strict freeze manifest & runtime environment binding, semantic money verification, independent review gating, and 68-test offline regression suite passing. Historical baseline evaluation recorded at commit `554fc4ed`; final acceptance pending independent re-audit.**
+**Status: Remediated following Independent Implementation Audit and Re-Audits (Rounds 1–4 remediated). Clean-clone live setup, offline CI, strict freeze manifest & runtime environment binding, semantic money verification, independent review gating, and 70 passing tests (1 live test skipped) in offline regression suite. Historical baseline evaluation recorded at commit `554fc4ed`; final acceptance pending independent re-audit.**
 
 Private repository: [kaustubh-dot/moneytrail](https://github.com/kaustubh-dot/moneytrail).
 
@@ -98,7 +98,7 @@ docker compose --env-file .env.setup up -d app
 ## 4. Verification & Testing
 
 ### Offline Test Regression Suite
-Runs the complete 68-test offline unit and regression suite without model downloads or external network access:
+Runs the complete offline unit and regression suite (70 passing tests, 1 live test skipped) without model downloads or external network access:
 ```bash
 uv run --env-file .env --env-file .env.setup pytest -v
 ```

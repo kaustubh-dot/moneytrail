@@ -1714,6 +1714,15 @@ def check_working_tree_clean(root_dir: Path) -> None:
         )
 
 
+def format_pinned_revision(name: str, rev: str) -> str:
+    """Format full runtime model identity with revision pinning."""
+    if not rev:
+        return name
+    if "@" in rev or "@" in name:
+        return rev if "@" in rev else name
+    return f"{name}@{rev}"
+
+
 def create_freeze_manifest(output_path: Path, eval_root: Path = Path("evals"), root_dir: Path | None = None) -> dict[str, Any]:
     """Create reproducible frozen manifest of code, revisions, schemas, datasets, and hardware."""
     from moneytrail.config import Settings
@@ -1755,11 +1764,7 @@ def create_freeze_manifest(output_path: Path, eval_root: Path = Path("evals"), r
             from moneytrail.config import PilotSettings
             settings = PilotSettings.from_env()
     def _format_pinned(name: str, rev: str) -> str:
-        if not rev:
-            return name
-        if "@" in rev or "@" in name:
-            return rev if "@" in rev else name
-        return f"{name}@{rev}"
+        return format_pinned_revision(name, rev)
 
     model_digest = getattr(settings, "model_digest", "")
     if not model_digest:
@@ -1768,9 +1773,9 @@ def create_freeze_manifest(output_path: Path, eval_root: Path = Path("evals"), r
     pinned = {
         "model": settings.model,
         "model_digest": model_digest,
-        "tokenizer": _format_pinned(settings.tokenizer, getattr(settings, "tokenizer_revision", "")),
-        "embedding": _format_pinned(settings.embedding_model, getattr(settings, "embedding_revision", "")),
-        "reranker": _format_pinned(settings.reranker_model, getattr(settings, "reranker_revision", "")),
+        "tokenizer": format_pinned_revision(settings.tokenizer, getattr(settings, "tokenizer_revision", "")),
+        "embedding": format_pinned_revision(settings.embedding_model, getattr(settings, "embedding_revision", "")),
+        "reranker": format_pinned_revision(settings.reranker_model, getattr(settings, "reranker_revision", "")),
     }
 
     decision_schema_str = json.dumps(Decision.model_json_schema(), sort_keys=True)
@@ -1844,6 +1849,7 @@ def create_freeze_manifest(output_path: Path, eval_root: Path = Path("evals"), r
         "datasets": datasets,
         "config": {
             "context_window": 8192,
+            "input_token_budget": getattr(settings, "input_token_budget", 6000),
             "max_tool_calls": settings.max_tool_calls,
             "max_model_turns": settings.max_model_turns,
             "model_timeout_seconds": settings.model_timeout_seconds,
@@ -2017,24 +2023,33 @@ def validate_freeze(
             )
         if pinned.get("tokenizer"):
             exp_tok = pinned["tokenizer"]
-            if settings.tokenizer_revision and settings.tokenizer_revision not in exp_tok:
+            act_tok = format_pinned_revision(settings.tokenizer, getattr(settings, "tokenizer_revision", ""))
+            if act_tok != exp_tok:
                 raise ValueError(
-                    f"Strict environment check failed: tokenizer revision mismatch: expected {exp_tok}, got {settings.tokenizer_revision}"
+                    f"Strict environment check failed: tokenizer pin mismatch: expected {exp_tok}, got {act_tok}"
                 )
         if pinned.get("embedding"):
             exp_emb = pinned["embedding"]
-            if settings.embedding_revision and settings.embedding_revision not in exp_emb:
+            act_emb = format_pinned_revision(settings.embedding_model, getattr(settings, "embedding_revision", ""))
+            if act_emb != exp_emb:
                 raise ValueError(
-                    f"Strict environment check failed: embedding revision mismatch: expected {exp_emb}, got {settings.embedding_revision}"
+                    f"Strict environment check failed: embedding pin mismatch: expected {exp_emb}, got {act_emb}"
                 )
         if pinned.get("reranker"):
             exp_rer = pinned["reranker"]
-            if settings.reranker_revision and settings.reranker_revision not in exp_rer:
+            act_rer = format_pinned_revision(settings.reranker_model, getattr(settings, "reranker_revision", ""))
+            if act_rer != exp_rer:
                 raise ValueError(
-                    f"Strict environment check failed: reranker revision mismatch: expected {exp_rer}, got {settings.reranker_revision}"
+                    f"Strict environment check failed: reranker pin mismatch: expected {exp_rer}, got {act_rer}"
                 )
 
         cfg = data.get("config", {})
+        if "input_token_budget" in cfg:
+            act_budget = getattr(settings, "input_token_budget", None)
+            if act_budget is not None and act_budget != cfg["input_token_budget"]:
+                raise ValueError(
+                    f"Strict environment check failed: input_token_budget mismatch: expected {cfg['input_token_budget']}, got {act_budget}"
+                )
         if "max_tool_calls" in cfg and settings.max_tool_calls != cfg["max_tool_calls"]:
             raise ValueError(
                 f"Strict environment check failed: max_tool_calls mismatch: expected {cfg['max_tool_calls']}, got {settings.max_tool_calls}"
@@ -2472,7 +2487,8 @@ def generate_final_report(
     return summary_text
 
 
-if __name__ == "__main__":
+def get_evaluation_cli_parser() -> argparse.ArgumentParser:
+    """Build and return argument parser for evaluation CLI."""
     parser = argparse.ArgumentParser(description="MoneyTrail Evaluation and Dataset Tools")
     subparsers = parser.add_subparsers(dest="subcommand")
 
@@ -2504,12 +2520,18 @@ if __name__ == "__main__":
     paired_parser.add_argument("--freeze", type=Path, required=True)
     paired_parser.add_argument("--eval-root", type=Path, default=Path("evals"))
     paired_parser.add_argument("--output", type=Path, default=Path("evals/reports/final.json"))
+    paired_parser.add_argument("--reviews", type=Path, default=None, help="Path to independent rubric reviews JSON file")
 
     rep_parser = subparsers.add_parser("report", help="Generate final markdown evaluation report and acceptance decision")
     rep_parser.add_argument("--input", type=Path, default=Path("evals/reports/final.json"))
     rep_parser.add_argument("--output", type=Path, default=Path("evals/reports/final-summary.md"))
     rep_parser.add_argument("--freeze", type=Path, default=None)
 
+    return parser
+
+
+if __name__ == "__main__":
+    parser = get_evaluation_cli_parser()
     args = parser.parse_args()
     if args.subcommand == "build-fixtures":
         build_all_fixtures(args.output, args.eval_root)
@@ -2526,7 +2548,7 @@ if __name__ == "__main__":
     elif args.subcommand == "freeze":
         create_freeze_manifest(args.output, args.eval_root)
     elif args.subcommand == "paired":
-        asyncio.run(run_paired_async(args.eval_root, args.split, args.freeze, args.output))
+        asyncio.run(run_paired_async(args.eval_root, args.split, args.freeze, args.output, args.reviews))
     elif args.subcommand == "report":
         generate_final_report(args.input, args.output, args.freeze)
     else:

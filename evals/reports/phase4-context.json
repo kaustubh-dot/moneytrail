@@ -596,8 +596,8 @@
       4.428
     ],
     "p50_warm_latency_s": 4.427,
-    "near_budget_context_tokens": 1650,
-    "near_budget_latency_s": 8.346,
+    "near_budget_context_tokens": 6098,
+    "near_budget_latency_s": 72.045,
     "fits_in_8192_context": true
   },
   "offline_provider_check": {

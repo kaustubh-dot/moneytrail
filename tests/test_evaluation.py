@@ -612,4 +612,56 @@ def test_generate_final_report_fails_closed_on_unreviewed_cases(tmp_path: Path):
     assert "18/18 PASSED" in report_approved
 
 
+def test_strict_freeze_pin_and_budget_mismatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """R4-002: Verify validate_freeze(strict_environment=True) verifies exact pins and input_token_budget."""
+    from moneytrail.evaluation import validate_freeze
+    import subprocess
+    commit = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    monkeypatch.setattr("moneytrail.evaluation.check_working_tree_clean", lambda r: None)
+
+    # 1. Tokenizer exact pin mismatch
+    freeze_data = {
+        "commit_hash": commit,
+        "dependency_locks": {},
+        "prompts_and_schemas": {},
+        "datasets": {},
+        "pinned_revisions": {
+            "tokenizer": "DifferentModel/Tokenizer@rev123",
+        },
+        "config": {},
+    }
+    f_path = tmp_path / "freeze_tok.json"
+    f_path.write_text(json.dumps(freeze_data), encoding="utf-8")
+    with pytest.raises(ValueError) as exc:
+        validate_freeze(f_path, strict_environment=True, repo_root=Path("."))
+    assert "tokenizer pin mismatch" in str(exc.value)
+
+    # 2. input_token_budget mismatch
+    freeze_data_budget = {
+        "commit_hash": commit,
+        "dependency_locks": {},
+        "prompts_and_schemas": {},
+        "datasets": {},
+        "pinned_revisions": {},
+        "config": {
+            "input_token_budget": 99999,
+        },
+    }
+    f_path_budget = tmp_path / "freeze_budget.json"
+    f_path_budget.write_text(json.dumps(freeze_data_budget), encoding="utf-8")
+    with pytest.raises(ValueError) as exc:
+        validate_freeze(f_path_budget, strict_environment=True, repo_root=Path("."))
+    assert "input_token_budget mismatch" in str(exc.value)
+
+
+def test_cli_paired_parser_reviews_argument():
+    """R4-001: Verify paired CLI subcommand accepts --reviews argument."""
+    from moneytrail.evaluation import get_evaluation_cli_parser
+    parser = get_evaluation_cli_parser()
+    args = parser.parse_args(["paired", "--freeze", "evals/reports/freeze.json", "--reviews", "evals/reports/reviews.json"])
+    assert args.reviews == Path("evals/reports/reviews.json")
+
+
+
+
 

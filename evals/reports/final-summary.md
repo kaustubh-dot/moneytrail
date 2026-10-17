@@ -95,4 +95,4 @@ Excluded zero-document questions: `['test-c6']`
 
 ## Final Acceptance Decision
 
-Based on the frozen paired evaluation and independent verification protocol, MoneyTrail **SATISFIES** all PRD MT-03, MT-05, MT-06, MT-08, MT-11, MT-12, MT-13, MT-14, and MT-16 criteria. The bounded agent achieves >=15/18 task outcomes with zero wrong/fabricated money facts, zero unauthorized actions, and complete evidence grounding across all three families.
+Under the historical initial automated criteria evaluated at baseline commit `554fc4ed`, MoneyTrail satisfied all initial PRD MT-03, MT-05, MT-06, MT-08, MT-11, MT-12, MT-13, MT-14, and MT-16 criteria. The bounded agent achieved >=15/18 task outcomes with zero wrong/fabricated money facts, zero unauthorized actions, and complete evidence grounding across all three families. Note that subsequent independent implementation audits challenged the initial automated scoring criteria (such as lack of required independent rubric reviews and semantic vs flat numeric validation); final verified acceptance for current and future revisions remains pending fresh independent held-out evaluation and rubric review.

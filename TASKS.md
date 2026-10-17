@@ -1,12 +1,12 @@
 # MoneyTrail task status and handoff
 
-Updated 2026-10-14. Status: Post-Audit Remediation in Progress. The initial implementation (Phases 0 through 6) was completed and benchmarked at baseline commit `554fc4edc4f1e8a300dd27e7d521df695a69a714`. Subsequent Independent Implementation Audits identified defects (F-001 through F-011 and R2-001 through R2-008). Active remediations are in progress and verified across unit tests, freeze integrity, and error propagation. Gate G6 and independent audit acceptance are pending final auditor verification.
+Updated 2026-10-17. Status: Post-Audit Remediation Complete (Rounds 1–4 remediated). The initial implementation (Phases 0 through 6) was completed and benchmarked at baseline commit `554fc4edc4f1e8a300dd27e7d521df695a69a714`. Subsequent Independent Implementation Audits identified defects (F-001 through F-011, R2-001 through R2-008, R3-001 through R3-006, and R4-001 through R4-004). All findings have been remediated: CLI review argument wired, strict runtime freeze pin binding and input token budget comparisons enforced, model feasibility evidence refreshed, and status documentation harmonized. Gate G5 and G6 acceptance remain pending fresh independent re-audit.
 
 [PRD.md](PRD.md) owns vision; [ARCHITECTURE.md](ARCHITECTURE.md) owns contracts; [EVALUATION.md](EVALUATION.md) owns verification; [ROADMAP.md](ROADMAP.md) owns exact ordered instructions. This file is the sole canonical checkbox/status/approval ledger.
 
 ### Current position and next action
 
-Current phase: **Post-Audit Remediation**. Remediating independent audit findings R2-001 through R2-008. All offline tests pass, dataset freeze integrity is fully restored, and operational error handling is strict.
+Current phase: **Post-Audit Remediation Complete**. Remediated independent audit findings R4-001 through R4-004. Ready for final independent evaluation.
 
 ## Canonical task list
 
@@ -66,8 +66,8 @@ A checkbox means the deliverable and minimal verification passed and evidence wa
 | G2 | Live uploaded case → original question → exact totals/explanation → CSV/PDF/text citations | Passed (candidate 807e9b3; independent reviewer PASS; 26/26 tests pass, 12/12 dev eval cases grounded, static UI built and served, pure integer paise accounting verified) | Approved via user batch authorization (2026-10-13) |
 | G3 | Hybrid retrieval/read tools and fixed development baseline | Passed (candidate dec3bc4, hardened in 92c00de; independent reviewer PASS; 28/28 tests pass, candidate recall @ 20: 1.0000, final doc recall @ 6: 1.0000, 12 dev fixed cases captured, typed dispatcher verified) | Approved via user batch authorization (2026-10-13) |
 | G4 | Bounded investigator, context, cancel/error/security/trace behavior, development review | Passed (candidate 1adcd85; independent reviewer PASS; explicit LangGraph graph with recursion_limit=16, 19/19 run-control/answer tests pass, 39/39 full suite pass, context accounting/near-budget pilot passed in evals/reports/phase4-context.json, 12 agent dev cases in evals/reports/dev_agent.jsonl, frontend built cleanly) | Approved via user batch authorization (2026-10-13) |
-| G5 | Frozen paired evaluation, monetary/security/outcome/retrieval gates, complete error report | Passed (candidate 02585c5; independent reviewer PASS; 49/49 tests pass, candidate recall @ 20: 1.0000, final doc recall @ 6: 1.0000, 18 paired test cases: fixed 18/18, bounded agent 17/18 [94.4%], zero monetary errors, zero unauthorized actions, max latency 18.30s, p95 11.04s, evals/reports/final-summary.md published) | Approved via user batch authorization (2026-10-13) |
-| G6 | Clean-clone live demo, actual CI result, accurate docs/interview handoff, final PRD review | Passed (candidate 3df36d3; independent reviewer PASS; 49/49 tests pass, clean-clone setup verified, live smoke test passed in 12s, offline CI workflow configured, comprehensive README and interview notes published) | Approved via user batch authorization (2026-10-13) |
+| G5 | Frozen paired evaluation, monetary/security/outcome/retrieval gates, complete error report | Passed (Historical initial criteria at candidate 02585c5; fresh independent evaluation and rubric review pending for current commit) | Approved via user batch authorization (2026-10-13; fresh evaluation pending) |
+| G6 | Clean-clone live demo, actual CI result, accurate docs/interview handoff, final PRD review | Passed (Historical initial criteria at candidate 3df36d3; final acceptance pending fresh independent re-audit) | Approved via user batch authorization (2026-10-13; final acceptance pending) |
 
 Implementation-start authorization: **Recorded (explicit batch authorization for Phases 0 through 6 in order with per-phase review-and-fix gate; 2026-10-13)**. Planning/repository authorization does not authorize application phases. Record actual user approval scope/date at each gate; never treat silence, a passing test, or a commit as approval. A user's explicit batch authorization of named phases may be recorded, but must not be inferred.
 
@@ -139,6 +139,12 @@ PRD, ARCHITECTURE, EVALUATION, ROADMAP, and README are synchronized with these d
 - R3-004: Cleaned inference qualification in `src/moneytrail/llm.py` to dynamically query architecture/quantization and require non-empty measured model digest for feasibility gate; eliminated hardcoded fallback in `create_freeze_manifest()`.
 - R3-005: Corrected UI Unexplained Diff badge condition in `InvestigationPanel.tsx` to check completeness flags only, preventing false "Known records only" badges on genuine discrepancies with complete data.
 - R3-006: Corrected documentation drift across `README.md` (68-test suite, strict citation validation), `TASKS.md`, and `evals/reports/final-summary.md` (audit challenges disclaimer). Full 68 offline regression tests passing. Final product acceptance pending independent re-audit.
+
+2026-10-17: Independent Implementation Re-Audit Round 4 conducted. Findings R4-001 through R4-004 remediated:
+- R4-001: Wired `--reviews` argument into the `paired` evaluation CLI parser in `src/moneytrail/evaluation.py` and passed it to `run_paired_async()`.
+- R4-002: Enforced exact formatted model identity pins (`name@revision`) in `validate_freeze(strict_environment=True)` for tokenizer, embedding, and reranker; included `input_token_budget` (6,000) in freeze config and verified it in strict mode.
+- R4-003: Refreshed model feasibility qualification evidence via `python -m moneytrail.llm pilot` on the local machine with live measured ~6,000 near-budget tokens and model digest.
+- R4-004: Harmonized status documentation across `TASKS.md` (added Historical to baseline G5/G6 rows), `evals/reports/final-summary.md` (explicit historical automated criteria disclaimer in final paragraph), and `README.md` (refined offline test suite precision to 70 passing tests, 1 live test skipped). Full 70 offline regression tests passing. Final product acceptance pending independent re-audit.
 
 ## Parked work
 

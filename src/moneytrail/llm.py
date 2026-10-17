@@ -367,7 +367,7 @@ async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any
                 response_type=Decision,
                 settings=settings,
                 think=False,
-                timeout_seconds=60.0,
+                timeout_seconds=90.0,
             )
             elapsed = time.perf_counter() - t0
             warm_latencies.append(round(elapsed, 3))
@@ -419,7 +419,7 @@ async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any
             response_type=Decision,
             settings=settings,
             think=False,
-            timeout_seconds=60.0,
+            timeout_seconds=180.0,
         )
         elapsed = time.perf_counter() - t0
         report["performance_probes"]["near_budget_latency_s"] = round(elapsed, 3)
