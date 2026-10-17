@@ -33,11 +33,11 @@ class PilotSettings(BaseModel):
     model: str = Field(default="qwen3:8b")
     model_digest: str = Field(default="")
     tokenizer: str = Field(default="Qwen/Qwen3-8B")
-    tokenizer_revision: str = Field(default="")
+    tokenizer_revision: str = Field(default="b968826d9c46dd6066d109eabc6255188de91218")
     embedding_model: str = Field(default="sentence-transformers/all-MiniLM-L6-v2")
-    embedding_revision: str = Field(default="")
+    embedding_revision: str = Field(default="1110a243fdf4706b3f48f1d95db1a4f5529b4d41")
     reranker_model: str = Field(default="cross-encoder/ms-marco-MiniLM-L6-v2")
-    reranker_revision: str = Field(default="")
+    reranker_revision: str = Field(default="233902d25c440f23af6f7d6e94d2946bac0bee0a")
     data_dir: Path = Field(default=Path("./data"))
     input_token_budget: int = Field(default=6000)
     max_tool_calls: int = Field(default=6)
@@ -47,17 +47,23 @@ class PilotSettings(BaseModel):
 
     @classmethod
     def from_env(cls) -> "PilotSettings":
+        env_file = Path(".env")
+        if env_file.exists():
+            for line in env_file.read_text(encoding="utf-8").splitlines():
+                if "=" in line and not line.strip().startswith("#"):
+                    k, v = line.split("=", 1)
+                    os.environ.setdefault(k.strip(), v.strip())
         data_dir_str = os.getenv("MONEYTRAIL_DATA_DIR", "./data")
         return cls(
             ollama_url=os.getenv("MONEYTRAIL_OLLAMA_URL", "http://127.0.0.1:11434"),
             model=os.getenv("MONEYTRAIL_MODEL", "qwen3:8b"),
             model_digest=os.getenv("MONEYTRAIL_MODEL_DIGEST", ""),
             tokenizer=os.getenv("MONEYTRAIL_MODEL_TOKENIZER", "Qwen/Qwen3-8B"),
-            tokenizer_revision=os.getenv("MONEYTRAIL_TOKENIZER_REVISION", ""),
+            tokenizer_revision=os.getenv("MONEYTRAIL_TOKENIZER_REVISION", "b968826d9c46dd6066d109eabc6255188de91218"),
             embedding_model=os.getenv("MONEYTRAIL_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
-            embedding_revision=os.getenv("MONEYTRAIL_EMBEDDING_REVISION", ""),
+            embedding_revision=os.getenv("MONEYTRAIL_EMBEDDING_REVISION", "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"),
             reranker_model=os.getenv("MONEYTRAIL_RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L6-v2"),
-            reranker_revision=os.getenv("MONEYTRAIL_RERANKER_REVISION", ""),
+            reranker_revision=os.getenv("MONEYTRAIL_RERANKER_REVISION", "233902d25c440f23af6f7d6e94d2946bac0bee0a"),
             data_dir=Path(data_dir_str).resolve(),
             input_token_budget=int(os.getenv("MONEYTRAIL_INPUT_TOKEN_BUDGET", "6000")),
             max_tool_calls=int(os.getenv("MONEYTRAIL_MAX_TOOL_CALLS", "6")),

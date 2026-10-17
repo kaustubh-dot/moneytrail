@@ -654,12 +654,155 @@ def test_strict_freeze_pin_and_budget_mismatch(tmp_path: Path, monkeypatch: pyte
     assert "input_token_budget mismatch" in str(exc.value)
 
 
-def test_cli_paired_parser_reviews_argument():
-    """R4-001: Verify paired CLI subcommand accepts --reviews argument."""
+def test_cli_report_parser_reviews_argument():
+    """R5-002: Verify report CLI subcommand accepts --reviews argument and paired rejects it."""
     from moneytrail.evaluation import get_evaluation_cli_parser
     parser = get_evaluation_cli_parser()
-    args = parser.parse_args(["paired", "--freeze", "evals/reports/freeze.json", "--reviews", "evals/reports/reviews.json"])
+    args = parser.parse_args(["report", "--reviews", "evals/reports/reviews.json"])
     assert args.reviews == Path("evals/reports/reviews.json")
+
+    # Verify paired subcommand no longer accepts --reviews
+    with pytest.raises(SystemExit):
+        parser.parse_args(["paired", "--freeze", "evals/reports/freeze.json", "--reviews", "evals/reports/reviews.json"])
+
+
+def test_generate_final_report_freeze_sha_and_retrieval_mismatch(tmp_path: Path):
+    """R5-003 & R5-004: Verify generate_final_report verifies freeze_sha256 and retrieval freeze metadata."""
+    eval_output = tmp_path / "test_paired.json"
+    summary_output = tmp_path / "summary.md"
+    freeze_file = tmp_path / "freeze.json"
+    retrieval_file = tmp_path / "test_retrieval.json"
+
+    retrieval_data = {
+        "freeze_commit": "commit_123",
+        "freeze_sha256": "sha_retrieval_123",
+        "total_questions": 18,
+        "eligible_questions": 17,
+        "candidate_recall_top20": {"reranked": {"pooled": 1.0}},
+        "final_doc_recall_top6": {"reranked": {"pooled": 1.0}},
+    }
+    retrieval_file.write_text(json.dumps(retrieval_data), encoding="utf-8")
+
+    freeze_data = {
+        "commit_hash": "commit_123",
+        "pinned_revisions": {"model": "qwen3:8b", "model_digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41"},
+        "hardware": {"cpu": "AMD", "ram": "32GB"},
+    }
+    freeze_file.write_text(json.dumps(freeze_data), encoding="utf-8")
+    from moneytrail.evaluation import compute_sha256
+    real_freeze_sha = compute_sha256(freeze_file)
+
+    eval_data = {
+        "split": "test",
+        "freeze_commit": "commit_123",
+        "freeze_sha256": "wrong_freeze_sha",
+        "runs": {},
+    }
+    eval_output.write_text(json.dumps(eval_data), encoding="utf-8")
+
+    # 1. SHA256 mismatch should raise ValueError
+    with pytest.raises(ValueError, match="Freeze file SHA256 mismatch"):
+        generate_final_report(eval_output, summary_output, freeze_path=freeze_file)
+
+    # Correct freeze_sha256 in eval_data
+    eval_data["freeze_sha256"] = real_freeze_sha
+    eval_output.write_text(json.dumps(eval_data), encoding="utf-8")
+
+    # 2. Retrieval freeze commit mismatch
+    retrieval_data["freeze_commit"] = "different_commit"
+    retrieval_file.write_text(json.dumps(retrieval_data), encoding="utf-8")
+    with pytest.raises(ValueError, match="Freeze commit mismatch between paired run"):
+        generate_final_report(eval_output, summary_output, freeze_path=freeze_file)
+
+    # 3. Retrieval freeze SHA mismatch
+    retrieval_data["freeze_commit"] = "commit_123"
+    retrieval_data["freeze_sha256"] = "wrong_retrieval_sha"
+    retrieval_file.write_text(json.dumps(retrieval_data), encoding="utf-8")
+    with pytest.raises(ValueError, match="Freeze SHA256 mismatch between paired run"):
+        generate_final_report(eval_output, summary_output, freeze_path=freeze_file)
+
+
+def test_generate_final_report_reviews_sidecar(tmp_path: Path):
+    """R5-002: Verify generate_final_report applies reviews sidecar if provided."""
+    eval_output = tmp_path / "test_paired.json"
+    summary_output = tmp_path / "summary.md"
+    freeze_file = tmp_path / "freeze.json"
+    retrieval_file = tmp_path / "test_retrieval.json"
+    reviews_file = tmp_path / "reviews.json"
+
+    retrieval_data = {
+        "total_questions": 18,
+        "eligible_questions": 17,
+        "candidate_recall_top20": {"reranked": {"pooled": 1.0}},
+        "final_doc_recall_top6": {"reranked": {"pooled": 1.0}},
+    }
+    retrieval_file.write_text(json.dumps(retrieval_data), encoding="utf-8")
+
+    runs = {}
+    reviews = {}
+    for i in range(1, 19):
+        fam = "A" if i <= 6 else ("B" if i <= 12 else "C")
+        eid = f"test-{i}"
+        runs[eid] = {
+            "eval_id": eid,
+            "family": fam,
+            "expected_outcome": "explained",
+            "fixed": {
+                "outcome": "explained",
+                "elapsed_s": 1.0,
+                "budget_summary": {"tool_calls_used": 1, "model_turns_used": 1},
+                "scores": {"overall": True},
+                "review": {"support_judgment": "pass", "outcome_judgment": "pass", "independent_review": False},
+            },
+            "agent": {
+                "outcome": "explained",
+                "elapsed_s": 2.0,
+                "budget_summary": {"tool_calls_used": 2, "model_turns_used": 1},
+                "scores": {
+                    "overall": True,
+                    "money": {"pass": True, "failures": []},
+                    "boundary": {"pass": True, "failures": []},
+                    "execution": {"pass": True, "failures": []},
+                    "evidence": {"pass": True, "failures": []},
+                    "outcome": {"pass": True, "failures": []},
+                    "failure_reasons": [],
+                },
+                "review": {"support_judgment": "unreviewed", "outcome_judgment": "unreviewed", "independent_review": False},
+            },
+            "comparison": {"winner": "agent"},
+        }
+        reviews[eid] = {
+            "agent": {
+                "independent_review": True,
+                "support_judgment": "pass",
+                "outcome_judgment": "pass",
+                "reviewer_notes": "All claims verified.",
+            }
+        }
+
+    freeze_data = {
+        "commit_hash": "abcdef123456",
+        "pinned_revisions": {"model": "qwen3:8b", "model_digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41"},
+        "hardware": {"cpu": "AMD", "ram": "32GB"},
+    }
+    freeze_file.write_text(json.dumps(freeze_data), encoding="utf-8")
+
+    eval_data = {
+        "split": "test",
+        "freeze_commit": "abcdef123456",
+        "runs": runs,
+    }
+    eval_output.write_text(json.dumps(eval_data), encoding="utf-8")
+    reviews_file.write_text(json.dumps(reviews), encoding="utf-8")
+
+    # Without reviews: fails G5
+    report_unreviewed = generate_final_report(eval_output, summary_output, freeze_path=freeze_file)
+    assert "FAIL (REJECTED)" in report_unreviewed
+
+    # With reviews sidecar: passes G5
+    report_reviewed = generate_final_report(eval_output, summary_output, freeze_path=freeze_file, reviews_path=reviews_file)
+    assert "PASS (ACCEPTED)" in report_reviewed
+    assert "18/18 PASSED" in report_reviewed
 
 
 

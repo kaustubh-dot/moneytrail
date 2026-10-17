@@ -1,12 +1,12 @@
 # MoneyTrail task status and handoff
 
-Updated 2026-10-17. Status: Post-Audit Remediation Complete (Rounds 1–4 remediated). The initial implementation (Phases 0 through 6) was completed and benchmarked at baseline commit `554fc4edc4f1e8a300dd27e7d521df695a69a714`. Subsequent Independent Implementation Audits identified defects (F-001 through F-011, R2-001 through R2-008, R3-001 through R3-006, and R4-001 through R4-004). All findings have been remediated: CLI review argument wired, strict runtime freeze pin binding and input token budget comparisons enforced, model feasibility evidence refreshed, and status documentation harmonized. Gate G5 and G6 acceptance remain pending fresh independent re-audit.
+Updated 2026-10-17. Status: Post-Audit Remediation Complete (Rounds 1–5 remediated). The initial implementation (Phases 0 through 6) was completed and benchmarked at baseline commit `554fc4edc4f1e8a300dd27e7d521df695a69a714`. Subsequent Independent Implementation Audits identified defects (F-001 through F-011, R2-001 through R2-008, R3-001 through R3-006, R4-001 through R4-004, and R5-001 through R5-006). All findings have been remediated: Phase 0 pilot enforces locked 60s model timeout and gates on configured limit; independent reviews decoupled from execution and applied as a sidecar at report generation time; historical freeze manifest restored and verified by SHA256; retrieval evaluation strictly bound to freeze; exact pinned tokenizer revision loaded; and status documentation harmonized. Gate G5 and G6 acceptance remain pending fresh independent re-audit.
 
 [PRD.md](PRD.md) owns vision; [ARCHITECTURE.md](ARCHITECTURE.md) owns contracts; [EVALUATION.md](EVALUATION.md) owns verification; [ROADMAP.md](ROADMAP.md) owns exact ordered instructions. This file is the sole canonical checkbox/status/approval ledger.
 
 ### Current position and next action
 
-Current phase: **Post-Audit Remediation Complete**. Remediated independent audit findings R4-001 through R4-004. Ready for final independent evaluation.
+Current phase: **Post-Audit Remediation Complete**. Remediated independent audit findings R5-001 through R5-006. Ready for final independent evaluation.
 
 ## Canonical task list
 
@@ -145,6 +145,14 @@ PRD, ARCHITECTURE, EVALUATION, ROADMAP, and README are synchronized with these d
 - R4-002: Enforced exact formatted model identity pins (`name@revision`) in `validate_freeze(strict_environment=True)` for tokenizer, embedding, and reranker; included `input_token_budget` (6,000) in freeze config and verified it in strict mode.
 - R4-003: Refreshed model feasibility qualification evidence via `python -m moneytrail.llm pilot` on the local machine with live measured ~6,000 near-budget tokens and model digest.
 - R4-004: Harmonized status documentation across `TASKS.md` (added Historical to baseline G5/G6 rows), `evals/reports/final-summary.md` (explicit historical automated criteria disclaimer in final paragraph), and `README.md` (refined offline test suite precision to 70 passing tests, 1 live test skipped). Full 70 offline regression tests passing. Final product acceptance pending independent re-audit.
+
+2026-10-17: Independent Implementation Re-Audit Round 5 conducted. Findings R5-001 through R5-006 remediated:
+- R5-001: Enforced locked 60s model timeout across all Phase 0 feasibility probes in `src/moneytrail/llm.py` (`timeout_seconds=float(settings.model_timeout_seconds)`); gated feasibility PASS strictly on near-budget probe completing within the configured timeout limit.
+- R5-002: Decoupled independent reviews from execution: removed `--reviews` from `paired` evaluation CLI parser so paired runs produce unreviewed outputs; added `--reviews` to `report` subcommand in `src/moneytrail/evaluation.py` and applied reviews sidecar at report generation time against already-written `final.json`.
+- R5-003: Restored historical `evals/reports/freeze.json` (SHA256: `97082a21d47214156e8f11cf452e11b1148a90a53d8be6ed7c0a4261cb23b73a`), matching `final.json["freeze_sha256"]`; enforced `freeze_sha256` verification in `generate_final_report()`; and kept `input_token_budget` in future freeze manifest generation.
+- R5-004: Strict-freeze bound retrieval evaluation in `src/moneytrail/evaluation.py`: enforced `strict_environment=True` when `--freeze` is supplied, recorded `freeze_commit` and `freeze_sha256` in retrieval summary, and verified them against paired run metadata at report generation time.
+- R5-005: Pinned exact tokenizer revision (`b968826d9c46dd6066d109eabc6255188de91218`) in `PilotSettings.from_env()`, kept `evals/reports/phase4-context.json` historical, and reran pilot with locked 60s timeout.
+- R5-006: Updated `EVALUATION.md:3` to qualify Gate G5 measurement as historical initial automated baseline, noting current formal acceptance is pending fresh independent evaluation. Full 72 offline regression tests passing (1 live test skipped).
 
 ## Parked work
 

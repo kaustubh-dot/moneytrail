@@ -72,7 +72,6 @@
   },
   "config": {
     "context_window": 8192,
-    "input_token_budget": 6000,
     "max_tool_calls": 6,
     "max_model_turns": 4,
     "model_timeout_seconds": 60,

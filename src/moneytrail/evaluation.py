@@ -1194,8 +1194,11 @@ async def run_retrieval_async(
     from moneytrail.retrieval import search_evidence
     from moneytrail.db import get_reader_connection
 
+    freeze_data = None
+    freeze_sha256 = None
     if freeze_path is not None:
-        validate_freeze(freeze_path, eval_root)
+        freeze_data = validate_freeze(freeze_path, eval_root, strict_environment=True)
+        freeze_sha256 = compute_sha256(freeze_path)
 
     settings = Settings.from_env()
     questions_file = eval_root / split / "questions.jsonl"
@@ -1333,6 +1336,8 @@ async def run_retrieval_async(
     retrieval_summary = {
         "split": split,
         "freeze_file": str(freeze_path) if freeze_path else None,
+        "freeze_commit": freeze_data.get("commit_hash") if freeze_data else None,
+        "freeze_sha256": freeze_sha256,
         "timestamp": datetime.now().isoformat(),
         "total_questions": len(items),
         "eligible_questions": len(eligible_items),
@@ -2075,7 +2080,6 @@ async def run_paired_async(
     split: str,
     freeze_path: Path,
     output_path: Path,
-    reviews_path: Path | None = None,
 ) -> dict[str, Any]:
     """
     Execute paired fixed and agent evaluations across the split with alternating mode order.
@@ -2091,10 +2095,6 @@ async def run_paired_async(
     settings = Settings.from_env()
     freeze_data = validate_freeze(freeze_path, eval_root, strict_environment=True)
     freeze_sha256 = compute_sha256(freeze_path)
-
-    external_reviews: dict[str, Any] = {}
-    if reviews_path and reviews_path.exists():
-        external_reviews = json.loads(reviews_path.read_text(encoding="utf-8"))
 
     # 1. Warmup model on demonstration bundle (excluded from latency metrics)
     print("Warming up model on demonstration bundle...")
@@ -2183,8 +2183,6 @@ async def run_paired_async(
             # Score run
             tool_calls_used = inv_res.budget_summary.get("tool_calls_used", 1)
             model_turns_used = inv_res.budget_summary.get("model_turns_used", 1)
-            case_rev = external_reviews.get(eval_id, {})
-            mode_rev = case_rev.get(mode) if isinstance(case_rev, dict) else None
             scores = score_case(
                 gold=item,
                 inv_res=inv_res,
@@ -2192,7 +2190,7 @@ async def run_paired_async(
                 tool_calls_used=tool_calls_used,
                 model_turns_used=model_turns_used,
                 source_map=source_map,
-                reviewer_review=mode_rev,
+                reviewer_review=None,
             )
 
             runs[eval_id][mode] = {
@@ -2270,6 +2268,7 @@ def generate_final_report(
     input_path: Path,
     output_path: Path,
     freeze_path: Path | None = None,
+    reviews_path: Path | None = None,
 ) -> str:
     """Generate final markdown report comparing fixed vs agent and evaluating PRD acceptance."""
     import numpy as np
@@ -2290,7 +2289,32 @@ def generate_final_report(
             f"freeze.json has {freeze_data['commit_hash']}"
         )
 
+    exp_freeze_sha = data.get("freeze_sha256")
+    if exp_freeze_sha:
+        act_freeze_sha = compute_sha256(freeze_path)
+        if act_freeze_sha != exp_freeze_sha:
+            raise ValueError(
+                f"Freeze file SHA256 mismatch against evaluated run: "
+                f"expected {exp_freeze_sha}, got {act_freeze_sha}"
+            )
+
     runs = data["runs"]
+
+    # Apply independent reviews sidecar if provided (R5-002)
+    if reviews_path is not None and reviews_path.exists():
+        reviews_data = json.loads(reviews_path.read_text(encoding="utf-8"))
+        for eid, r in runs.items():
+            if eid in reviews_data:
+                rev_entry = reviews_data[eid]
+                if "agent" in rev_entry and isinstance(rev_entry["agent"], dict):
+                    rev_entry = rev_entry["agent"]
+                r["agent"]["review"] = {
+                    "independent_review": bool(rev_entry.get("independent_review", False)),
+                    "support_judgment": rev_entry.get("support_judgment", "unreviewed"),
+                    "outcome_judgment": rev_entry.get("outcome_judgment", "unreviewed"),
+                    "reviewer_notes": rev_entry.get("reviewer_notes", ""),
+                }
+
     for eid, r in runs.items():
         for m in ["fixed", "agent"]:
             rev = r[m].get("review", {})
@@ -2339,6 +2363,18 @@ def generate_final_report(
     retrieval_data = {}
     if retrieval_file.exists():
         retrieval_data = json.loads(retrieval_file.read_text(encoding="utf-8"))
+        if retrieval_data.get("freeze_commit") and data.get("freeze_commit"):
+            if retrieval_data["freeze_commit"] != data["freeze_commit"]:
+                raise ValueError(
+                    f"Freeze commit mismatch between paired run ({data.get('freeze_commit')}) "
+                    f"and retrieval evaluation ({retrieval_data.get('freeze_commit')})"
+                )
+        if retrieval_data.get("freeze_sha256") and data.get("freeze_sha256"):
+            if retrieval_data["freeze_sha256"] != data["freeze_sha256"]:
+                raise ValueError(
+                    f"Freeze SHA256 mismatch between paired run ({data.get('freeze_sha256')}) "
+                    f"and retrieval evaluation ({retrieval_data.get('freeze_sha256')})"
+                )
 
     pass_outcomes = agent_passed >= 15
     pass_families = all(fam_stats[f]["agent_passed"] >= 4 for f in families)
@@ -2520,12 +2556,12 @@ def get_evaluation_cli_parser() -> argparse.ArgumentParser:
     paired_parser.add_argument("--freeze", type=Path, required=True)
     paired_parser.add_argument("--eval-root", type=Path, default=Path("evals"))
     paired_parser.add_argument("--output", type=Path, default=Path("evals/reports/final.json"))
-    paired_parser.add_argument("--reviews", type=Path, default=None, help="Path to independent rubric reviews JSON file")
 
     rep_parser = subparsers.add_parser("report", help="Generate final markdown evaluation report and acceptance decision")
     rep_parser.add_argument("--input", type=Path, default=Path("evals/reports/final.json"))
     rep_parser.add_argument("--output", type=Path, default=Path("evals/reports/final-summary.md"))
     rep_parser.add_argument("--freeze", type=Path, default=None)
+    rep_parser.add_argument("--reviews", type=Path, default=None, help="Path to independent rubric reviews JSON file")
 
     return parser
 
@@ -2548,9 +2584,9 @@ if __name__ == "__main__":
     elif args.subcommand == "freeze":
         create_freeze_manifest(args.output, args.eval_root)
     elif args.subcommand == "paired":
-        asyncio.run(run_paired_async(args.eval_root, args.split, args.freeze, args.output, args.reviews))
+        asyncio.run(run_paired_async(args.eval_root, args.split, args.freeze, args.output))
     elif args.subcommand == "report":
-        generate_final_report(args.input, args.output, args.freeze)
+        generate_final_report(args.input, args.output, args.freeze, args.reviews)
     else:
         parser.print_help()
 

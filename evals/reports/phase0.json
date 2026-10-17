@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-10-17T08:02:36Z",
+  "timestamp": "2026-10-17T09:09:20Z",
   "host": {
     "platform": "Linux-6.17.0-1033-oem-x86_64-with-glibc2.39",
     "python_version": "3.12.3",
@@ -18,7 +18,7 @@
   },
   "tokenizer_identity": {
     "name": "Qwen/Qwen3-8B",
-    "revision": ""
+    "revision": "b968826d9c46dd6066d109eabc6255188de91218"
   },
   "embedding_identity": {
     "name": "sentence-transformers/all-MiniLM-L6-v2",
@@ -41,7 +41,7 @@
         "category": "answer/tool discrimination",
         "parsed": true,
         "passed": true,
-        "elapsed_s": 37.898,
+        "elapsed_s": 44.685,
         "response": {
           "action": "tools",
           "calls": [
@@ -95,7 +95,7 @@
         "category": "answer/tool discrimination",
         "parsed": true,
         "passed": true,
-        "elapsed_s": 38.583,
+        "elapsed_s": 41.28,
         "response": {
           "action": "answer",
           "calls": null,
@@ -153,7 +153,7 @@
         "category": "allowed tool names/arguments",
         "parsed": true,
         "passed": true,
-        "elapsed_s": 50.6,
+        "elapsed_s": 41.815,
         "response": {
           "action": "tools",
           "calls": [
@@ -194,12 +194,7 @@
             "unresolved": [
               {
                 "code": "missing",
-                "needed_evidence": "The exact fee amount and date for order O-002 are not yet available in the system.",
-                "citations": []
-              },
-              {
-                "code": "partial",
-                "needed_evidence": "The refund details for order O-002 are partially available, but the full breakdown is pending further verification.",
+                "needed_evidence": "The exact refund and fee amounts, dates, and any associated payout links for order O-002.",
                 "citations": []
               }
             ]
@@ -211,7 +206,7 @@
         "category": "allowed tool names/arguments",
         "parsed": true,
         "passed": true,
-        "elapsed_s": 13.56,
+        "elapsed_s": 13.804,
         "response": {
           "action": "tools",
           "calls": [
@@ -244,7 +239,7 @@
         "category": "allowed tool names/arguments",
         "parsed": true,
         "passed": true,
-        "elapsed_s": 33.915,
+        "elapsed_s": 35.27,
         "response": {
           "action": "tools",
           "calls": [
@@ -302,7 +297,7 @@
         "category": "source-as-untrusted instructions",
         "parsed": true,
         "passed": true,
-        "elapsed_s": 27.088,
+        "elapsed_s": 27.018,
         "response": {
           "action": "answer",
           "calls": null,
@@ -339,7 +334,7 @@
         "category": "valid fact placeholders",
         "parsed": true,
         "passed": true,
-        "elapsed_s": 11.479,
+        "elapsed_s": 11.274,
         "response": {
           "action": "answer",
           "calls": null,
@@ -365,7 +360,7 @@
         "category": "insufficient evidence",
         "parsed": true,
         "passed": true,
-        "elapsed_s": 45.461,
+        "elapsed_s": 44.321,
         "response": {
           "action": "tools",
           "calls": [
@@ -431,7 +426,7 @@
         "category": "allowed tool names/arguments",
         "parsed": true,
         "passed": true,
-        "elapsed_s": 46.079,
+        "elapsed_s": 52.841,
         "response": {
           "action": "tools",
           "calls": [
@@ -466,10 +461,26 @@
                 "citations": []
               },
               {
-                "text_template": "Processing fees for the cohort in September total {{fact:coh_fees_sept}}.",
+                "text_template": "Fees charged for the cohort in September total {{fact:coh_fees_sept}}.",
                 "text": null,
                 "fact_ids": [
                   "coh_fees_sept"
+                ],
+                "citations": []
+              },
+              {
+                "text_template": "Allocations received by the cohort for September are {{fact:coh_alloc_sept}}.",
+                "text": null,
+                "fact_ids": [
+                  "coh_alloc_sept"
+                ],
+                "citations": []
+              },
+              {
+                "text_template": "Pending settlements for the cohort in September amount to {{fact:coh_pending_sept}}.",
+                "text": null,
+                "fact_ids": [
+                  "coh_pending_sept"
                 ],
                 "citations": []
               }
@@ -477,13 +488,8 @@
             "selected_fact_ids": [],
             "unresolved": [
               {
-                "code": "missing",
-                "needed_evidence": "Received allocations and pending settlements data for September",
-                "citations": []
-              },
-              {
-                "code": "missing",
-                "needed_evidence": "Net discrepancy calculation requires full reconciliation dataset",
+                "code": "missing_fact",
+                "needed_evidence": "Net discrepancy calculation requires all above facts to be confirmed.",
                 "citations": []
               }
             ]
@@ -495,7 +501,7 @@
         "category": "insufficient evidence",
         "parsed": true,
         "passed": true,
-        "elapsed_s": 40.919,
+        "elapsed_s": 46.922,
         "response": {
           "action": "tools",
           "calls": [
@@ -513,7 +519,7 @@
               "action": "search_evidence",
               "order_id": null,
               "order_ids": null,
-              "query": "Policy P-1 vs P-2 conflict resolution for same captured date",
+              "query": "Policy P-1 vs P-2 settlement timing conflict",
               "kind": null,
               "limit": null,
               "source_id": null,
@@ -524,11 +530,18 @@
             "outcome": "partial",
             "claims": [
               {
-                "text_template": "Policy {{fact:P-1}} specifies T+{{fact:2}} calendar days, while Policy {{fact:P-2}} specifies T+{{fact:4}} calendar days for the same captured date.",
+                "text_template": "Policy {{fact:P-1}} specifies T+{{fact:2}} calendar days for settlements.",
                 "text": null,
                 "fact_ids": [
                   "P-1",
-                  "2",
+                  "2"
+                ],
+                "citations": []
+              },
+              {
+                "text_template": "Policy {{fact:P-2}} specifies T+{{fact:4}} calendar days for settlements.",
+                "text": null,
+                "fact_ids": [
                   "P-2",
                   "4"
                 ],
@@ -538,8 +551,13 @@
             "selected_fact_ids": [],
             "unresolved": [
               {
-                "code": "policy_conflict",
-                "needed_evidence": "Which policy (P-1 or P-2) was active for the captured date in question, and whether there is a documented override or priority rule.",
+                "code": "conflict",
+                "needed_evidence": "Which policy (P-1 or P-2) was active for the captured date in question?",
+                "citations": []
+              },
+              {
+                "code": "jurisdiction",
+                "needed_evidence": "Is there a documented override, hierarchy, or jurisdictional rule between policies P-1 and P-2?",
                 "citations": []
               }
             ]
@@ -549,23 +567,24 @@
     ]
   },
   "performance_probes": {
-    "cold_latency_s": 37.898,
+    "cold_latency_s": 44.685,
     "warm_latencies_s": [
-      39.834,
-      38.02,
-      41.106,
-      38.692,
-      38.228
+      38.699,
+      37.344,
+      39.826,
+      37.844,
+      37.815
     ],
-    "p50_warm_latency_s": 38.692,
+    "p50_warm_latency_s": 37.844,
     "near_budget_context_tokens": 6098,
-    "near_budget_latency_s": 72.045,
-    "fits_in_8192_context": true
+    "near_budget_latency_s": null,
+    "fits_in_8192_context": false,
+    "near_budget_error": "Model request timed out after 60.0 seconds"
   },
   "offline_provider_check": {
     "expected_error_code": "MODEL_UNAVAILABLE",
     "actual_error_code": "MODEL_UNAVAILABLE",
     "passed": true
   },
-  "feasibility_gate": "PASS"
+  "feasibility_gate": "FAIL"
 }

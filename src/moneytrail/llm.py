@@ -322,7 +322,7 @@ async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any
                 response_type=Decision,
                 settings=settings,
                 think=False,
-                timeout_seconds=60.0,
+                timeout_seconds=float(settings.model_timeout_seconds),
             )
             elapsed = time.perf_counter() - t0
             probe_record["elapsed_s"] = round(elapsed, 3)
@@ -367,7 +367,7 @@ async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any
                 response_type=Decision,
                 settings=settings,
                 think=False,
-                timeout_seconds=90.0,
+                timeout_seconds=float(settings.model_timeout_seconds),
             )
             elapsed = time.perf_counter() - t0
             warm_latencies.append(round(elapsed, 3))
@@ -419,7 +419,7 @@ async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any
             response_type=Decision,
             settings=settings,
             think=False,
-            timeout_seconds=180.0,
+            timeout_seconds=float(settings.model_timeout_seconds),
         )
         elapsed = time.perf_counter() - t0
         report["performance_probes"]["near_budget_latency_s"] = round(elapsed, 3)
@@ -450,14 +450,19 @@ async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any
         print(f"  Offline provider produced expected code: {e.code}")
 
     # Determine feasibility gate:
-    # Require 10/10 parsed, 0 illegal dispatches, at least 8/10 passed, offline check passed, fits in 8192 context, non-empty measured digest
+    # Require 10/10 parsed, 0 illegal dispatches, at least 8/10 passed, offline check passed, fits in 8192 context, non-empty measured digest, and near-budget probe completed within configured timeout
+    near_budget_ok = (
+        report["performance_probes"]["fits_in_8192_context"]
+        and report["performance_probes"].get("near_budget_latency_s") is not None
+        and report["performance_probes"]["near_budget_latency_s"] <= float(settings.model_timeout_seconds)
+    )
     if (
         parsed_count == 10
         and illegal_dispatches == 0
         and passed_count >= 8
         and bool(report["model_identity"].get("digest"))
         and report["offline_provider_check"]["passed"]
-        and report["performance_probes"]["fits_in_8192_context"]
+        and near_budget_ok
     ):
         report["feasibility_gate"] = "PASS"
     else:
