@@ -13,6 +13,7 @@ from uuid import UUID
 from langgraph.graph import StateGraph, START, END
 import psycopg
 from psycopg.rows import dict_row
+from pydantic import BaseModel
 
 from moneytrail.config import Settings
 from moneytrail.db import get_reader_connection
@@ -333,6 +334,24 @@ def count_tokens(text: str, tokenizer: Any) -> int:
     return len(tokenizer.encode(text, add_special_tokens=False))
 
 
+def count_input_tokens(
+    messages: list[dict[str, str]],
+    tokenizer: Any,
+    response_type: type[BaseModel] | None = None,
+) -> int:
+    """
+    Count total input tokens for chat messages including chat template formatting
+    and optional response JSON schema overhead.
+    """
+    schema_overhead = (
+        len(tokenizer.encode(json.dumps(response_type.model_json_schema())))
+        if response_type is not None
+        else 0
+    )
+    chat_text = tokenizer.apply_chat_template(messages, tokenize=False)
+    return len(tokenizer.encode(chat_text)) + schema_overhead
+
+
 DECISION_SYSTEM_PROMPT = (
     "You are MoneyTrail, an evidence-backed merchant payment discrepancy investigator for Meridian Store (INR).\n"
     "Analyze the user's question, reconciliation facts, applicable policies, and evidence.\n\n"
@@ -617,15 +636,11 @@ def assemble_context(
         + fee_grounding_directive
     )
 
-    schema_overhead = len(tokenizer.encode(json.dumps(Decision.model_json_schema())))
-    mandatory_chat = tokenizer.apply_chat_template(
-        [
-            {"role": "system", "content": system_content},
-            {"role": "user", "content": mandatory_user_text},
-        ],
-        tokenize=False,
-    )
-    mandatory_tokens = len(tokenizer.encode(mandatory_chat)) + schema_overhead
+    mandatory_messages = [
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": mandatory_user_text},
+    ]
+    mandatory_tokens = count_input_tokens(mandatory_messages, tokenizer, Decision)
 
     if mandatory_tokens > budget:
         raise LLMError(
@@ -645,14 +660,11 @@ def assemble_context(
                 f"{it.get('text', '')}\n\n"
             )
             candidate_user_content = current_user_content + chunk_line
-            candidate_chat = tokenizer.apply_chat_template(
-                [
-                    {"role": "system", "content": system_content},
-                    {"role": "user", "content": candidate_user_content},
-                ],
-                tokenize=False,
-            )
-            candidate_tokens = len(tokenizer.encode(candidate_chat)) + schema_overhead
+            candidate_messages = [
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": candidate_user_content},
+            ]
+            candidate_tokens = count_input_tokens(candidate_messages, tokenizer, Decision)
             if candidate_tokens <= budget:
                 current_user_content = candidate_user_content
                 try:
@@ -664,14 +676,11 @@ def assemble_context(
     else:
         current_user_content += "No external correspondence chunks retrieved.\n\n"
 
-    final_chat = tokenizer.apply_chat_template(
-        [
-            {"role": "system", "content": system_content},
-            {"role": "user", "content": current_user_content},
-        ],
-        tokenize=False,
-    )
-    total_tokens = len(tokenizer.encode(final_chat)) + schema_overhead
+    final_messages = [
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": current_user_content},
+    ]
+    total_tokens = count_input_tokens(final_messages, tokenizer, Decision)
 
     messages = [
         ChatMessage(role="system", content=system_content),

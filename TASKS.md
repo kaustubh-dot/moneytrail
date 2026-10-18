@@ -1,12 +1,12 @@
 # MoneyTrail task status and handoff
 
-Updated 2026-10-17. Status: Post-Audit Remediation Complete (Rounds 1–6 remediated). The initial implementation (Phases 0 through 6) was completed and benchmarked at baseline commit `554fc4edc4f1e8a300dd27e7d521df695a69a714`. Subsequent Independent Implementation Audits identified defects (F-001 through F-011, R2-001 through R2-008, R3-001 through R3-006, R4-001 through R4-004, R5-001 through R5-006, and R6-001 through R6-002). All findings have been remediated: retrieval provenance fails closed for frozen evaluations requiring exact freeze metadata; review sidecars are strictly bound to evaluated final.json by SHA256; Phase 0 pilot enforces locked 60s model timeout; independent reviews decoupled from execution; historical freeze manifest restored and verified by SHA256; retrieval evaluation strictly bound to freeze; exact pinned tokenizer revision loaded; and status documentation harmonized. Gate G5 and G6 acceptance remain pending fresh independent re-audit.
+Updated 2026-10-18. Status: Post-Audit Remediation (Round 7 Audit: R6-001/R6-002 VERIFIED PASS). The initial implementation (Phases 0 through 6) was completed and benchmarked at baseline commit `554fc4edc4f1e8a300dd27e7d521df695a69a714`. Subsequent Independent Implementation Audits identified defects (F-001 through F-011, R2-001 through R2-008, R3-001 through R3-006, R4-001 through R4-004, R5-001 through R5-006, and R6-001 through R6-002). All findings have been remediated and verified closed: retrieval provenance fails closed for frozen evaluations requiring exact freeze metadata; review sidecars are strictly bound to evaluated final.json by SHA256; Phase 0 pilot enforces locked 60s model timeout; independent reviews decoupled from execution; historical freeze manifest restored and verified by SHA256; retrieval evaluation strictly bound to freeze; exact pinned tokenizer revision loaded; Ollama serving limits (8192 context, 1024 output) explicitly enforced in shared client; input token budget dynamically targeted with unified template/schema accounting; timeout separated from context-fit evidence; and host GPU / processor placement captured. Gate G0 feasibility remains unresolved pending serving/pilot remeasurement on unconstrained demo host.
 
 [PRD.md](PRD.md) owns vision; [ARCHITECTURE.md](ARCHITECTURE.md) owns contracts; [EVALUATION.md](EVALUATION.md) owns verification; [ROADMAP.md](ROADMAP.md) owns exact ordered instructions. This file is the sole canonical checkbox/status/approval ledger.
 
 ### Current position and next action
 
-Current phase: **Post-Audit Remediation Complete**. Remediated independent audit findings R6-001 and R6-002. Ready for final independent evaluation.
+Current phase: **Post-Audit Remediation (Round 7 Verified Pass on R6-001/R6-002)**. Pending Phase-0 serving/pilot remeasurement on the intended unconstrained demo host.
 
 ## Canonical task list
 
@@ -157,6 +157,11 @@ PRD, ARCHITECTURE, EVALUATION, ROADMAP, and README are synchronized with these d
 2026-10-17: Independent Implementation Re-Audit Round 6 conducted. Findings R6-001 and R6-002 remediated:
 - R6-001: Enforced retrieval provenance fail-closed validation in `generate_final_report()`: if paired evaluation contains a freeze identity, retrieval report must contain both `freeze_commit` and `freeze_sha256`, and missing either field or mismatching against paired run raises a clear `ValueError`.
 - R6-002: Bound independent review sidecars to exact evaluated `final.json` in `generate_final_report()`: computes `final_sha256`, requires matching `final_sha256` (and matching `freeze_commit` if present) in sidecar, failing closed on missing or mismatched identity. Full 74 offline regression tests passing (1 live test skipped).
+
+2026-10-18: Independent Implementation Re-Audit Round 7 conducted. R6-001 and R6-002 verified closed (PASS):
+- R6-001 verified: retrieval provenance fails closed on missing or mismatched freeze metadata. Historical artifacts preserved unedited.
+- R6-002 verified: review sidecars cryptographically bound to evaluated final.json by SHA256.
+- Serving and pilot measurement corrections implemented: explicit enforcement of OLLAMA_CONTEXT_TOKENS (8,192) and MODEL_OUTPUT_ALLOWANCE_TOKENS (1,024) in complete_structured(); dynamic input token budget target derived from settings.input_token_budget without literal 6000 dependency; unified count_input_tokens helper accounting for chat template and Decision schema overhead across assemble_context and pilot probe without overshoot; separation of timeout from context-fit evidence (preserving fits_in_8192_context=true on READ_TIMEOUT); Ollama response metrics extraction (duration, token counts, tokens/sec); and minimal host GPU evidence and observed processor placement capture. Gate G0 feasibility remains unresolved pending clean remeasurement on unconstrained demo host. Full 79 offline regression tests passing (1 live test skipped).
 
 ## Parked work
 

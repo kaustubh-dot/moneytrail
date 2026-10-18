@@ -2,7 +2,7 @@
 
 An evidence-backed merchant payment investigator: explain why recorded sales and received payments differ, using source documents, transaction records, and deterministic calculations.
 
-**Status: Remediated following Independent Implementation Audit and Re-Audits (Rounds 1–6 remediated). Clean-clone live setup, offline CI, strict freeze manifest & runtime environment binding, retrieval provenance fail-closed validation, SHA256 review sidecar binding, and 74 passing tests (1 live test skipped) in offline regression suite. Historical baseline evaluation recorded at commit `554fc4ed`; final acceptance pending independent re-audit.**
+**Status: Remediated following Independent Implementation Audit and Re-Audits (Rounds 1–7 verified). Clean-clone live setup, offline CI, strict freeze manifest & runtime environment binding, retrieval provenance fail-closed validation, SHA256 review sidecar binding, explicit Ollama serving limits (8192 ctx / 1024 out), and 79 passing tests (1 live test skipped) in offline regression suite. Historical baseline evaluation recorded at commit `554fc4ed`; Gate G0 feasibility unresolved pending serving/pilot remeasurement on unconstrained demo host.**
 
 Private repository: [kaustubh-dot/moneytrail](https://github.com/kaustubh-dot/moneytrail).
 

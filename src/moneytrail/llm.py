@@ -14,7 +14,12 @@ from typing import Any, TypeVar
 import ollama
 from pydantic import BaseModel
 
-from moneytrail.config import PilotSettings, Settings
+from moneytrail.config import (
+    MODEL_OUTPUT_ALLOWANCE_TOKENS,
+    OLLAMA_CONTEXT_TOKENS,
+    PilotSettings,
+    Settings,
+)
 from moneytrail.schemas import (
     AnswerDraft,
     ChatMessage,
@@ -41,13 +46,43 @@ class LLMError(Exception):
         self.details = details or {}
 
 
+def _extract_ollama_metrics(resp: Any) -> dict[str, Any]:
+    """Extract standard Ollama performance counters and compute rates."""
+    metrics: dict[str, Any] = {}
+    keys = (
+        "total_duration",
+        "load_duration",
+        "prompt_eval_count",
+        "prompt_eval_duration",
+        "eval_count",
+        "eval_duration",
+    )
+    for key in keys:
+        val = resp.get(key) if (isinstance(resp, dict) or hasattr(resp, "get")) else getattr(resp, key, None)
+        if val is not None:
+            metrics[key] = val
+
+    eval_count = metrics.get("eval_count")
+    eval_duration_ns = metrics.get("eval_duration")
+    if eval_count and eval_duration_ns and eval_duration_ns > 0:
+        metrics["eval_tokens_per_second"] = round(eval_count / (eval_duration_ns / 1e9), 2)
+
+    prompt_eval_count = metrics.get("prompt_eval_count")
+    prompt_eval_duration_ns = metrics.get("prompt_eval_duration")
+    if prompt_eval_count and prompt_eval_duration_ns and prompt_eval_duration_ns > 0:
+        metrics["prompt_tokens_per_second"] = round(prompt_eval_count / (prompt_eval_duration_ns / 1e9), 2)
+
+    return metrics
+
+
 async def complete_structured(
     messages: list[ChatMessage | dict[str, str]],
     response_type: type[T],
     settings: Settings | PilotSettings,
     think: bool = False,
     timeout_seconds: float = 60.0,
-) -> T:
+    include_metadata: bool = False,
+) -> T | tuple[T, dict[str, Any]]:
     """Execute a structured completion against the local Ollama provider."""
     # Convert ChatMessage objects to dicts
     serialized_messages = []
@@ -64,23 +99,39 @@ async def complete_structured(
 
     client = ollama.AsyncClient(host=settings.ollama_url)
 
+    options = {
+        "temperature": 0.0,
+        "repeat_penalty": 1.1,
+        "num_ctx": OLLAMA_CONTEXT_TOKENS,
+        "num_predict": MODEL_OUTPUT_ALLOWANCE_TOKENS,
+    }
+
     try:
         coro = client.chat(
             model=settings.model,
             messages=serialized_messages,
             format=schema,
-            options={"temperature": 0.0, "repeat_penalty": 1.1},
+            options=options,
             think=think,
         )
         resp = await asyncio.wait_for(coro, timeout=timeout_seconds)
     except asyncio.TimeoutError:
         raise LLMError("READ_TIMEOUT", f"Model request timed out after {timeout_seconds} seconds")
     except (ollama.ResponseError, ollama.RequestError) as e:
+        err_str = str(e).lower()
+        if "context" in err_str and any(k in err_str for k in ("exceed", "length", "too long", "window", "token")):
+            raise LLMError("CONTEXT_LIMIT", f"Context window exceeded: {e}")
+        if any(k in err_str for k in ("out of memory", "oom", "cuda", "allocate", "memory")):
+            raise LLMError("OUT_OF_MEMORY", f"Provider out of memory: {e}")
         raise LLMError("MODEL_UNAVAILABLE", f"Ollama provider request failed: {e}")
     except Exception as e:
         err_str = str(e).lower()
         if "connect" in err_str or "connection" in err_str:
             raise LLMError("MODEL_UNAVAILABLE", f"Cannot connect to Ollama at {settings.ollama_url}: {e}")
+        if "context" in err_str and any(k in err_str for k in ("exceed", "length", "too long", "window")):
+            raise LLMError("CONTEXT_LIMIT", f"Context window exceeded: {e}")
+        if any(k in err_str for k in ("out of memory", "oom", "cuda", "allocate", "memory")):
+            raise LLMError("OUT_OF_MEMORY", f"Provider out of memory: {e}")
         raise LLMError("PROVIDER_ERROR", f"Unexpected inference failure: {e}")
 
     content = resp.get("message", {}).get("content", "")
@@ -88,9 +139,14 @@ async def complete_structured(
         raise LLMError("MODEL_SCHEMA", "Model returned empty response content")
 
     try:
-        return response_type.model_validate_json(content)
+        parsed = response_type.model_validate_json(content)
     except Exception as e:
         raise LLMError("MODEL_SCHEMA", f"Failed to validate response against {response_type.__name__}: {e}", {"raw": content})
+
+    if include_metadata:
+        metrics = _extract_ollama_metrics(resp)
+        return parsed, metrics
+    return parsed
 
 
 # --- Phase 0 Feasibility Pilot Probes ---
@@ -221,6 +277,74 @@ def _get_contract_probes() -> list[dict[str, Any]]:
     ]
 
 
+def _get_gpu_info() -> dict[str, Any]:
+    """Capture host GPU hardware evidence via nvidia-smi if present."""
+    gpu_info: dict[str, Any] = {
+        "present": False,
+        "name": None,
+        "vram_total_mb": None,
+        "vram_free_mb": None,
+    }
+    try:
+        proc = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=name,memory.total,memory.free",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            lines = proc.stdout.strip().splitlines()
+            if lines:
+                parts = [p.strip() for p in lines[0].split(",")]
+                if len(parts) >= 3:
+                    gpu_info["present"] = True
+                    gpu_info["name"] = parts[0]
+                    gpu_info["vram_total_mb"] = int(float(parts[1]))
+                    gpu_info["vram_free_mb"] = int(float(parts[2]))
+    except Exception:
+        pass
+    return gpu_info
+
+
+async def _observe_ollama_processor(settings: Settings | PilotSettings) -> dict[str, Any]:
+    """Inspect active Ollama process placement (GPU/CPU/mixed) via CLI or API."""
+    info: dict[str, Any] = {"processor": None, "raw_ps": None}
+    try:
+        proc = subprocess.run(["ollama", "ps"], capture_output=True, text=True, timeout=5, check=False)
+        if proc.returncode == 0:
+            info["raw_ps"] = proc.stdout.strip()
+            lines = proc.stdout.strip().splitlines()
+            if len(lines) > 1:
+                cols = lines[0].split()
+                if "PROCESSOR" in cols:
+                    idx = cols.index("PROCESSOR")
+                    row = lines[1].split()
+                    if len(row) > idx:
+                        info["processor"] = row[idx]
+    except Exception:
+        pass
+    if not info["processor"]:
+        try:
+            client = ollama.AsyncClient(host=settings.ollama_url)
+            ps_res = await client.ps()
+            models = getattr(ps_res, "models", []) or (ps_res.get("models", []) if isinstance(ps_res, dict) else [])
+            for m in models:
+                m_name = getattr(m, "model", None) or getattr(m, "name", None) or (m.get("model") if isinstance(m, dict) else None)
+                if m_name == settings.model or m_name == f"{settings.model}:latest":
+                    proc_val = getattr(m, "processor", None) or (m.get("processor") if isinstance(m, dict) else None)
+                    if proc_val:
+                        info["processor"] = str(proc_val)
+                        break
+        except Exception:
+            pass
+    return info
+
+
 async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any]:
     """Execute Stage 0 feasibility measurements and write report."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -231,6 +355,7 @@ async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any
             "python_version": platform.python_version(),
             "cpu": platform.processor() or "Intel Core Ultra 9 285",
             "ram_total_bytes": os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") if hasattr(os, "sysconf") else None,
+            "gpu": _get_gpu_info(),
         },
         "model_identity": {
             "candidate": settings.model,
@@ -267,9 +392,12 @@ async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any
             "cold_latency_s": None,
             "warm_latencies_s": [],
             "p50_warm_latency_s": None,
+            "warm_requests": [],
             "near_budget_context_tokens": None,
             "near_budget_latency_s": None,
+            "near_budget_status": None,
             "fits_in_8192_context": True,
+            "observed_processor": None,
         },
         "offline_provider_check": {
             "expected_error_code": "MODEL_UNAVAILABLE",
@@ -317,16 +445,18 @@ async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any
             "response": None,
         }
         try:
-            decision = await complete_structured(
+            decision, metrics = await complete_structured(
                 messages=probe["messages"],
                 response_type=Decision,
                 settings=settings,
                 think=False,
                 timeout_seconds=float(settings.model_timeout_seconds),
+                include_metadata=True,
             )
             elapsed = time.perf_counter() - t0
             probe_record["elapsed_s"] = round(elapsed, 3)
             probe_record["parsed"] = True
+            probe_record["metrics"] = metrics
             parsed_count += 1
             probe_record["response"] = decision.model_dump()
 
@@ -354,6 +484,7 @@ async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any
 
     # 2. Performance probes: 1 cold (first probe), 5 warm requests
     warm_latencies = []
+    warm_requests = []
     print("Measuring warm request latencies...")
     warm_messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -362,31 +493,38 @@ async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any
     for i in range(5):
         t0 = time.perf_counter()
         try:
-            await complete_structured(
+            _, metrics = await complete_structured(
                 messages=warm_messages,
                 response_type=Decision,
                 settings=settings,
                 think=False,
                 timeout_seconds=float(settings.model_timeout_seconds),
+                include_metadata=True,
             )
             elapsed = time.perf_counter() - t0
-            warm_latencies.append(round(elapsed, 3))
-            print(f"  Warm request {i+1}/5: {round(elapsed, 3)}s")
+            latency = round(elapsed, 3)
+            warm_latencies.append(latency)
+            warm_requests.append({"latency_s": latency, "metrics": metrics})
+            print(f"  Warm request {i+1}/5: {latency}s")
         except Exception as e:
             print(f"  Warm request {i+1}/5 failed: {e}")
 
     report["performance_probes"]["cold_latency_s"] = report["contract_probes"]["results"][0]["elapsed_s"]
     report["performance_probes"]["warm_latencies_s"] = warm_latencies
+    report["performance_probes"]["warm_requests"] = warm_requests
     if warm_latencies:
         sorted_warm = sorted(warm_latencies)
         report["performance_probes"]["p50_warm_latency_s"] = sorted_warm[len(sorted_warm) // 2]
 
-    # 3. Near-budget context probe (~6,000 tokens)
-    print("Running near-budget context probe (~6,000 input tokens)...")
-    # Assemble ~6,000 token synthetic context block measured using tokenizer
+    # Observe processor placement from running model
+    report["performance_probes"]["observed_processor"] = await _observe_ollama_processor(settings)
+
+    # 3. Near-budget context probe targeting settings.input_token_budget
+    budget = settings.input_token_budget
+    print(f"Running near-budget context probe (target {budget} input tokens)...")
     tok = None
     try:
-        from moneytrail.agent import count_tokens, get_tokenizer
+        from moneytrail.agent import count_input_tokens, get_tokenizer
         tok = get_tokenizer(settings)
     except Exception as e:
         logger.warning(f"Could not load tokenizer for near-budget probe: {e}")
@@ -396,41 +534,100 @@ async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any
         "Policy metadata: Published-At: 2026-09-01T00:00:00+05:30 Effective-From: 2026-09-01 Settlement-Calendar-Days: 2 Processing-Fee-Bps: 250. "
     )
     if tok is not None:
-        pattern_tokens = count_tokens(pattern, tok)
-        base_prompt = "Here is the context data:\n\nReconcile order O-00100."
-        base_tokens = count_tokens(SYSTEM_PROMPT + base_prompt, tok)
-        needed_tokens = max(1000, 6000 - base_tokens)
-        repeats = needed_tokens // max(1, pattern_tokens)
-        dummy_text_block = pattern * repeats
-        while count_tokens(SYSTEM_PROMPT + f"Here is the context data:\n{dummy_text_block}\nReconcile order O-00100.", tok) < 6000:
-            dummy_text_block += pattern
-        near_budget_tokens = count_tokens(SYSTEM_PROMPT + f"Here is the context data:\n{dummy_text_block}\nReconcile order O-00100.", tok)
+        base_prefix = "Here is the context data:\n"
+        base_suffix = "\nReconcile order O-00100."
+        base_messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": f"{base_prefix}{base_suffix}"},
+        ]
+        base_tokens = count_input_tokens(base_messages, tok, Decision)
+        needed_tokens = max(0, budget - base_tokens)
+
+        pattern_ids = tok.encode(pattern, add_special_tokens=False)
+        repeats = needed_tokens // max(1, len(pattern_ids))
+        remainder = needed_tokens % max(1, len(pattern_ids))
+        filler_token_ids = (pattern_ids * repeats) + pattern_ids[:remainder]
+        dummy_text_block = tok.decode(filler_token_ids)
+
+        near_budget_messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": f"{base_prefix}{dummy_text_block}{base_suffix}"},
+        ]
+        near_budget_tokens = count_input_tokens(near_budget_messages, tok, Decision)
+
+        # Fine-tune token count to target budget precisely without overshooting
+        while near_budget_tokens > budget and filler_token_ids:
+            diff = near_budget_tokens - budget
+            filler_token_ids = filler_token_ids[:-diff]
+            dummy_text_block = tok.decode(filler_token_ids)
+            near_budget_messages[1]["content"] = f"{base_prefix}{dummy_text_block}{base_suffix}"
+            near_budget_tokens = count_input_tokens(near_budget_messages, tok, Decision)
+
+        while near_budget_tokens < budget:
+            diff = budget - near_budget_tokens
+            filler_token_ids.extend(pattern_ids[:diff])
+            dummy_text_block = tok.decode(filler_token_ids)
+            near_budget_messages[1]["content"] = f"{base_prefix}{dummy_text_block}{base_suffix}"
+            new_tokens = count_input_tokens(near_budget_messages, tok, Decision)
+            if new_tokens == near_budget_tokens:
+                break
+            near_budget_tokens = new_tokens
+            if near_budget_tokens >= budget:
+                if near_budget_tokens > budget:
+                    filler_token_ids = filler_token_ids[:-1]
+                    dummy_text_block = tok.decode(filler_token_ids)
+                    near_budget_messages[1]["content"] = f"{base_prefix}{dummy_text_block}{base_suffix}"
+                    near_budget_tokens = count_input_tokens(near_budget_messages, tok, Decision)
+                break
     else:
         raise RuntimeError("Cannot measure near-budget context tokens: tokenizer failed to load")
 
-    near_budget_messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": f"Here is the context data:\n{dummy_text_block}\nReconcile order O-00100."},
-    ]
+    report["performance_probes"]["near_budget_context_tokens"] = near_budget_tokens
+    # By construction, token count is within OLLAMA_CONTEXT_TOKENS (8192)
+    report["performance_probes"]["fits_in_8192_context"] = (near_budget_tokens <= OLLAMA_CONTEXT_TOKENS)
+
     t0 = time.perf_counter()
     try:
-        decision = await complete_structured(
+        decision, metrics = await complete_structured(
             messages=near_budget_messages,
             response_type=Decision,
             settings=settings,
             think=False,
             timeout_seconds=float(settings.model_timeout_seconds),
+            include_metadata=True,
         )
         elapsed = time.perf_counter() - t0
         report["performance_probes"]["near_budget_latency_s"] = round(elapsed, 3)
-        report["performance_probes"]["near_budget_context_tokens"] = near_budget_tokens
-        report["performance_probes"]["fits_in_8192_context"] = True
+        report["performance_probes"]["near_budget_status"] = "COMPLETED"
+        report["performance_probes"]["near_budget_metrics"] = metrics
         print(f"  Near-budget request passed in {round(elapsed, 3)}s ({near_budget_tokens} tokens)")
-    except Exception as e:
-        report["performance_probes"]["near_budget_context_tokens"] = near_budget_tokens
-        report["performance_probes"]["fits_in_8192_context"] = False
+    except LLMError as e:
+        elapsed = time.perf_counter() - t0
         report["performance_probes"]["near_budget_error"] = str(e)
+        report["performance_probes"]["near_budget_error_code"] = e.code
+
+        if e.code == "READ_TIMEOUT":
+            report["performance_probes"]["near_budget_status"] = "TIMEOUT"
+            # Separate timeout from context-fit evidence: a timeout does not mean context failed to fit
+        elif e.code == "CONTEXT_LIMIT":
+            report["performance_probes"]["near_budget_status"] = "CONTEXT_EXCEEDED"
+            report["performance_probes"]["fits_in_8192_context"] = False
+        elif e.code == "OUT_OF_MEMORY":
+            report["performance_probes"]["near_budget_status"] = "OUT_OF_MEMORY"
+        else:
+            report["performance_probes"]["near_budget_status"] = "PROVIDER_FAILURE"
+
+        print(f"  Near-budget request failed with {e.code}: {e}")
+    except Exception as e:
+        elapsed = time.perf_counter() - t0
+        report["performance_probes"]["near_budget_error"] = str(e)
+        report["performance_probes"]["near_budget_error_code"] = "PROVIDER_ERROR"
+        report["performance_probes"]["near_budget_status"] = "PROVIDER_FAILURE"
         print(f"  Near-budget request failed: {e}")
+
+    # Re-check observed processor after near-budget inference if not yet captured
+    if not report["performance_probes"].get("observed_processor", {}).get("processor"):
+        report["performance_probes"]["observed_processor"] = await _observe_ollama_processor(settings)
 
     # 4. Offline provider behavior check
     print("Testing offline provider behavior...")
@@ -452,7 +649,8 @@ async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any
     # Determine feasibility gate:
     # Require 10/10 parsed, 0 illegal dispatches, at least 8/10 passed, offline check passed, fits in 8192 context, non-empty measured digest, and near-budget probe completed within configured timeout
     near_budget_ok = (
-        report["performance_probes"]["fits_in_8192_context"]
+        report["performance_probes"].get("fits_in_8192_context") is True
+        and report["performance_probes"].get("near_budget_status") == "COMPLETED"
         and report["performance_probes"].get("near_budget_latency_s") is not None
         and report["performance_probes"]["near_budget_latency_s"] <= float(settings.model_timeout_seconds)
     )
