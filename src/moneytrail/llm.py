@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import platform
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -311,37 +312,82 @@ def _get_gpu_info() -> dict[str, Any]:
     return gpu_info
 
 
+def _compute_processor_placement(size: int | None, size_vram: int | None) -> str | None:
+    """Derive processor placement string from model size and VRAM allocation."""
+    if size is None or size <= 0:
+        if size_vram and size_vram > 0:
+            return "100% GPU"
+        return None
+    if size_vram is None or size_vram == 0:
+        return "100% CPU"
+    if size_vram >= size:
+        return "100% GPU"
+    gpu_pct = round((size_vram / size) * 100)
+    cpu_pct = 100 - gpu_pct
+    return f"{gpu_pct}% GPU / {cpu_pct}% CPU"
+
+
 async def _observe_ollama_processor(settings: Settings | PilotSettings) -> dict[str, Any]:
-    """Inspect active Ollama process placement (GPU/CPU/mixed) via CLI or API."""
-    info: dict[str, Any] = {"processor": None, "raw_ps": None}
+    """Inspect active Ollama process placement (GPU/CPU/mixed) via API or CLI."""
+    info: dict[str, Any] = {
+        "processor": None,
+        "size": None,
+        "size_vram": None,
+        "raw_ps": None,
+    }
+
+    # 1. Primary: Query Ollama ps API and derive placement from size and size_vram
     try:
-        proc = subprocess.run(["ollama", "ps"], capture_output=True, text=True, timeout=5, check=False)
-        if proc.returncode == 0:
-            info["raw_ps"] = proc.stdout.strip()
-            lines = proc.stdout.strip().splitlines()
-            if len(lines) > 1:
-                cols = lines[0].split()
-                if "PROCESSOR" in cols:
-                    idx = cols.index("PROCESSOR")
-                    row = lines[1].split()
-                    if len(row) > idx:
-                        info["processor"] = row[idx]
-    except Exception:
-        pass
+        client = ollama.AsyncClient(host=settings.ollama_url)
+        ps_res = await client.ps()
+        models = getattr(ps_res, "models", []) or (ps_res.get("models", []) if isinstance(ps_res, dict) else [])
+        for m in models:
+            m_name = getattr(m, "model", None) or getattr(m, "name", None) or (m.get("model") if isinstance(m, dict) else None)
+            if m_name == settings.model or m_name == f"{settings.model}:latest" or (m_name and settings.model in m_name):
+                # Check for direct processor attribute if exposed by client/daemon
+                proc_attr = getattr(m, "processor", None)
+                if proc_attr is None and isinstance(m, dict):
+                    proc_attr = m.get("processor")
+                if proc_attr:
+                    info["processor"] = str(proc_attr).strip()
+
+                size = getattr(m, "size", None)
+                if size is None and isinstance(m, dict):
+                    size = m.get("size")
+                size_vram = getattr(m, "size_vram", None)
+                if size_vram is None and isinstance(m, dict):
+                    size_vram = m.get("size_vram")
+
+                info["size"] = int(size) if size is not None else None
+                info["size_vram"] = int(size_vram) if size_vram is not None else None
+
+                if not info["processor"]:
+                    info["processor"] = _compute_processor_placement(info["size"], info["size_vram"])
+                if info["processor"]:
+                    break
+    except Exception as e:
+        logger.debug(f"Could not query Ollama ps API: {e}")
+
+    # 2. Secondary fallback: parse CLI `ollama ps` with regex if API did not yield a processor
     if not info["processor"]:
         try:
-            client = ollama.AsyncClient(host=settings.ollama_url)
-            ps_res = await client.ps()
-            models = getattr(ps_res, "models", []) or (ps_res.get("models", []) if isinstance(ps_res, dict) else [])
-            for m in models:
-                m_name = getattr(m, "model", None) or getattr(m, "name", None) or (m.get("model") if isinstance(m, dict) else None)
-                if m_name == settings.model or m_name == f"{settings.model}:latest":
-                    proc_val = getattr(m, "processor", None) or (m.get("processor") if isinstance(m, dict) else None)
-                    if proc_val:
-                        info["processor"] = str(proc_val)
-                        break
-        except Exception:
-            pass
+            proc = subprocess.run(["ollama", "ps"], capture_output=True, text=True, timeout=5, check=False)
+            if proc.returncode == 0 and proc.stdout.strip():
+                info["raw_ps"] = proc.stdout.strip()
+                lines = proc.stdout.strip().splitlines()
+                for line in lines[1:]:
+                    if settings.model in line or "qwen" in line.lower():
+                        m = re.search(
+                            r"(\d+%\s*(?:/\s*\d+%\s*)?(?:CPU/GPU|GPU/CPU|GPU|CPU)(?:[/\s]+\d+%\s*(?:GPU|CPU))?)",
+                            line,
+                            re.IGNORECASE,
+                        )
+                        if m:
+                            info["processor"] = m.group(1).strip()
+                            break
+        except Exception as e:
+            logger.debug(f"Could not query ollama ps CLI: {e}")
+
     return info
 
 
@@ -504,9 +550,32 @@ async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any
             elapsed = time.perf_counter() - t0
             latency = round(elapsed, 3)
             warm_latencies.append(latency)
-            warm_requests.append({"latency_s": latency, "metrics": metrics})
+            warm_requests.append({
+                "status": "COMPLETED",
+                "latency_s": latency,
+                "metrics": metrics,
+            })
             print(f"  Warm request {i+1}/5: {latency}s")
+        except LLMError as e:
+            elapsed = time.perf_counter() - t0
+            latency = round(elapsed, 3)
+            status = "TIMEOUT" if e.code == "READ_TIMEOUT" else "FAILED"
+            warm_requests.append({
+                "status": status,
+                "latency_s": latency,
+                "error": str(e),
+                "error_code": e.code,
+            })
+            print(f"  Warm request {i+1}/5 failed ({status}): {e}")
         except Exception as e:
+            elapsed = time.perf_counter() - t0
+            latency = round(elapsed, 3)
+            warm_requests.append({
+                "status": "FAILED",
+                "latency_s": latency,
+                "error": str(e),
+                "error_code": "PROVIDER_ERROR",
+            })
             print(f"  Warm request {i+1}/5 failed: {e}")
 
     report["performance_probes"]["cold_latency_s"] = report["contract_probes"]["results"][0]["elapsed_s"]
@@ -647,7 +716,18 @@ async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any
         print(f"  Offline provider produced expected code: {e.code}")
 
     # Determine feasibility gate:
-    # Require 10/10 parsed, 0 illegal dispatches, at least 8/10 passed, offline check passed, fits in 8192 context, non-empty measured digest, and near-budget probe completed within configured timeout
+    # Require 10/10 parsed, 0 illegal dispatches, at least 8/10 passed, offline check passed,
+    # fits in 8192 context, non-empty measured digest, near-budget probe completed within configured timeout,
+    # and all 5 warm requests completed within configured timeout
+    warm_probes_ok = (
+        len(warm_requests) == 5
+        and all(
+            req.get("status") == "COMPLETED"
+            and req.get("latency_s") is not None
+            and req["latency_s"] <= float(settings.model_timeout_seconds)
+            for req in warm_requests
+        )
+    )
     near_budget_ok = (
         report["performance_probes"].get("fits_in_8192_context") is True
         and report["performance_probes"].get("near_budget_status") == "COMPLETED"
@@ -661,6 +741,7 @@ async def run_pilot(output_path: Path, settings: PilotSettings) -> dict[str, Any
         and bool(report["model_identity"].get("digest"))
         and report["offline_provider_check"]["passed"]
         and near_budget_ok
+        and warm_probes_ok
     ):
         report["feasibility_gate"] = "PASS"
     else:

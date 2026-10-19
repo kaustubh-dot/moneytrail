@@ -16,7 +16,9 @@ from moneytrail.config import (
 )
 from moneytrail.llm import (
     LLMError,
+    _compute_processor_placement,
     _extract_ollama_metrics,
+    _observe_ollama_processor,
     complete_structured,
     run_pilot,
 )
@@ -218,4 +220,145 @@ async def test_run_pilot_separates_timeout_from_context_fit(tmp_path: Path):
         assert report["performance_probes"]["near_budget_status"] == "TIMEOUT"
         assert report["performance_probes"]["near_budget_latency_s"] is None
         # Strict gate fails because near_budget_status != "COMPLETED"
+        assert report["feasibility_gate"] == "FAIL"
+
+
+def test_compute_processor_placement():
+    """Verify processor placement calculation across GPU, CPU, and mixed splits."""
+    assert _compute_processor_placement(None, None) is None
+    assert _compute_processor_placement(0, 0) is None
+    assert _compute_processor_placement(0, 1000) == "100% GPU"
+    assert _compute_processor_placement(6_000_000_000, 0) == "100% CPU"
+    assert _compute_processor_placement(6_000_000_000, None) == "100% CPU"
+    assert _compute_processor_placement(6_000_000_000, 6_000_000_000) == "100% GPU"
+    assert _compute_processor_placement(6_000_000_000, 7_000_000_000) == "100% GPU"
+    assert _compute_processor_placement(10_000, 5_000) == "50% GPU / 50% CPU"
+    assert _compute_processor_placement(10_000, 7_500) == "75% GPU / 25% CPU"
+    assert _compute_processor_placement(10_000, 3_333) == "33% GPU / 67% CPU"
+
+
+@pytest.mark.asyncio
+async def test_observe_ollama_processor():
+    """Verify _observe_ollama_processor extracts processor placement via API and CLI fallback."""
+    settings = PilotSettings.from_env()
+
+    # 1. API returns 100% GPU
+    with patch("ollama.AsyncClient") as mock_client_cls:
+        mock_client = AsyncMock()
+        mock_client.ps = AsyncMock(return_value={
+            "models": [{
+                "model": settings.model,
+                "size": 6_000_000_000,
+                "size_vram": 6_000_000_000,
+            }]
+        })
+        mock_client_cls.return_value = mock_client
+
+        info = await _observe_ollama_processor(settings)
+        assert info["processor"] == "100% GPU"
+        assert info["size"] == 6_000_000_000
+        assert info["size_vram"] == 6_000_000_000
+
+    # 2. API returns 100% CPU
+    with patch("ollama.AsyncClient") as mock_client_cls:
+        mock_client = AsyncMock()
+        mock_client.ps = AsyncMock(return_value={
+            "models": [{
+                "model": settings.model,
+                "size": 6_000_000_000,
+                "size_vram": 0,
+            }]
+        })
+        mock_client_cls.return_value = mock_client
+
+        info = await _observe_ollama_processor(settings)
+        assert info["processor"] == "100% CPU"
+        assert info["size"] == 6_000_000_000
+        assert info["size_vram"] == 0
+
+    # 3. API fails, CLI fallback succeeds with 100% GPU
+    cli_output = "NAME        ID              SIZE      PROCESSOR    CONTEXT    RUNNER\nqwen3:8b    500a1f067a9f    6.7 GB    100% GPU     8192       llamacpp\n"
+    with patch("ollama.AsyncClient") as mock_client_cls, \
+         patch("subprocess.run") as mock_subproc:
+        mock_client = AsyncMock()
+        mock_client.ps = AsyncMock(side_effect=Exception("API connection refused"))
+        mock_client_cls.return_value = mock_client
+
+        mock_proc = mock_subproc.return_value
+        mock_proc.returncode = 0
+        mock_proc.stdout = cli_output
+
+        info = await _observe_ollama_processor(settings)
+        assert info["processor"] == "100% GPU"
+        assert info["raw_ps"] == cli_output.strip()
+
+    # 4. API fails, CLI fallback parses mixed processor format
+    cli_output_mixed = "NAME        ID              SIZE      PROCESSOR    CONTEXT    RUNNER\nqwen3:8b    500a1f067a9f    6.7 GB    40%/60% CPU/GPU     8192       llamacpp\n"
+    with patch("ollama.AsyncClient") as mock_client_cls, \
+         patch("subprocess.run") as mock_subproc:
+        mock_client = AsyncMock()
+        mock_client.ps = AsyncMock(side_effect=Exception("API connection refused"))
+        mock_client_cls.return_value = mock_client
+
+        mock_proc = mock_subproc.return_value
+        mock_proc.returncode = 0
+        mock_proc.stdout = cli_output_mixed
+
+        info = await _observe_ollama_processor(settings)
+        assert info["processor"] == "40%/60% CPU/GPU"
+
+
+@pytest.mark.asyncio
+async def test_run_pilot_warm_request_failure_fails_feasibility_gate(tmp_path: Path):
+    """Verify run_pilot fails feasibility_gate if any warm request times out or fails (R8-001)."""
+    settings = PilotSettings.from_env()
+    output_path = tmp_path / "phase0_warm_fail.json"
+
+    warm_call_count = 0
+
+    async def mock_complete(*args, **kwargs):
+        nonlocal warm_call_count
+        messages = kwargs.get("messages") or args[0]
+        content = str(messages)
+
+        # Warm requests have the specific probe question
+        if "What is the status of order O-001 with gross INR 80,000?" in content:
+            warm_call_count += 1
+            if warm_call_count == 3:
+                # 3rd warm probe times out
+                raise LLMError("READ_TIMEOUT", "Model request timed out after 60.0 seconds")
+            decision = Decision(action="tools", calls=[{"action": "inspect_order", "order_id": "O-001"}])
+            metrics = {"total_duration": 1_000_000_000, "eval_count": 10, "prompt_eval_count": 50}
+            if kwargs.get("include_metadata"):
+                return decision, metrics
+            return decision
+
+        decision = Decision(action="tools", calls=[{"action": "inspect_order", "order_id": "O-005"}])
+        metrics = {"total_duration": 1_000_000_000, "eval_count": 10, "prompt_eval_count": 50}
+        if kwargs.get("include_metadata"):
+            return decision, metrics
+        return decision
+
+    with patch("moneytrail.llm.complete_structured", side_effect=mock_complete), \
+         patch("ollama.AsyncClient") as mock_client_cls:
+
+        mock_client = AsyncMock()
+        mock_client.show = AsyncMock(return_value={"details": {"quantization_level": "Q4_K_M", "family": "qwen3", "parameter_size": "8.2B"}})
+        mock_client.list = AsyncMock(return_value={"models": [{"name": settings.model, "digest": "500a1f067a9f782620b40bee6f7b0c89e17ae61f686b92c24933e4ca4b2b8b41"}]})
+        mock_client.ps = AsyncMock(return_value={"models": []})
+        mock_client_cls.return_value = mock_client
+
+        report = await run_pilot(output_path, settings)
+
+        # 5 warm attempts recorded
+        warm_reqs = report["performance_probes"]["warm_requests"]
+        assert len(warm_reqs) == 5
+        assert warm_reqs[0]["status"] == "COMPLETED"
+        assert warm_reqs[1]["status"] == "COMPLETED"
+        assert warm_reqs[2]["status"] == "TIMEOUT"
+        assert warm_reqs[2]["error_code"] == "READ_TIMEOUT"
+        assert warm_reqs[3]["status"] == "COMPLETED"
+        assert warm_reqs[4]["status"] == "COMPLETED"
+
+        # Gate must FAIL because not all warm probes succeeded
         assert report["feasibility_gate"] == "FAIL"
