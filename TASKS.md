@@ -1,12 +1,12 @@
 # MoneyTrail task status and handoff
 
-Updated 2026-10-19. Status: Post-Audit Remediation (Round 8 Remediated: R8-001/R8-002). The initial implementation (Phases 0 through 6) was completed and benchmarked at baseline commit `554fc4edc4f1e8a300dd27e7d521df695a69a714`. Subsequent Independent Implementation Audits identified defects (F-001 through F-011, R2-001 through R2-008, R3-001 through R3-006, R4-001 through R4-004, R5-001 through R5-006, R6-001 through R6-002, and R8-001 through R8-002). All findings have been remediated and verified closed: retrieval provenance fails closed for frozen evaluations requiring exact freeze metadata; review sidecars are strictly bound to evaluated final.json by SHA256; Phase 0 pilot enforces locked 60s model timeout; independent reviews decoupled from execution; historical freeze manifest restored and verified by SHA256; retrieval evaluation strictly bound to freeze; exact pinned tokenizer revision loaded; Ollama serving limits (8192 context, 1024 output) explicitly enforced in shared client; input token budget dynamically targeted with unified template/schema accounting; timeout separated from context-fit evidence; host GPU / processor placement robustly captured via size/size_vram and regex fallback; and warm probe failures/timeouts strictly participate in feasibility gate. Gate G0 feasibility remains unresolved pending serving/pilot remeasurement on unconstrained demo host.
+Updated 2026-10-23. Status: Post-Audit Remediation (Round 8 Remediated: R8-001/R8-002; G0 qualified on intended GPU-backed host). The initial implementation (Phases 0 through 6) was completed and benchmarked at baseline commit `554fc4edc4f1e8a300dd27e7d521df695a69a714`. Subsequent Independent Implementation Audits identified defects (F-001 through F-011, R2-001 through R2-008, R3-001 through R3-006, R4-001 through R4-004, R5-001 through R5-006, R6-001 through R6-002, and R8-001 through R8-002). All findings have been remediated and verified closed: retrieval provenance fails closed for frozen evaluations requiring exact freeze metadata; review sidecars are strictly bound to evaluated final.json by SHA256; Phase 0 pilot enforces locked 60s model timeout; independent reviews decoupled from execution; historical freeze manifest restored and verified by SHA256; retrieval evaluation strictly bound to freeze; exact pinned tokenizer revision loaded; Ollama serving limits (8192 context, 1024 output) explicitly enforced in shared client; input token budget dynamically targeted with unified template/schema accounting; timeout separated from context-fit evidence; host GPU / processor placement robustly captured via size/size_vram and regex fallback; and warm probe failures/timeouts strictly participate in feasibility gate. Gate G0 feasibility qualified on intended GPU-backed host (NVIDIA RTX 4000 Ada, 100% GPU, warm p50 4.694s, near-budget 3.042s, evals/reports/phase0-gpu.json). Historical failed Phase-0 results remain preserved as diagnostic/history evidence. Final frozen held-out evaluation remains pending.
 
 [PRD.md](PRD.md) owns vision; [ARCHITECTURE.md](ARCHITECTURE.md) owns contracts; [EVALUATION.md](EVALUATION.md) owns verification; [ROADMAP.md](ROADMAP.md) owns exact ordered instructions. This file is the sole canonical checkbox/status/approval ledger.
 
 ### Current position and next action
 
-Current phase: **Post-Audit Remediation (Round 8 Remediated on R8-001/R8-002)**. Pending Phase-0 serving/pilot remeasurement on the intended unconstrained demo host.
+Current phase: **Post-Audit Remediation (Round 8 Remediated; G0 qualified on intended GPU-backed host)**. Final frozen held-out evaluation remains pending.
 
 ## Canonical task list
 
@@ -61,7 +61,7 @@ A checkbox means the deliverable and minimal verification passed and evidence wa
 
 | Gate | Required evidence | Verification | User approval |
 | --- | --- | --- | --- |
-| G0 | Reviewed scope, locked identities, measured feasibility, independent valid fixtures/gold | Passed (candidate ec5b9c7; independent reviewer PASS; 10/10 probes, exact demo totals, 12 dev + 18 test disjoint datasets validated) | Approved via user batch authorization (2026-10-13) |
+| G0 | Reviewed scope, locked identities, measured feasibility, independent valid fixtures/gold | Passed (candidate ec5b9c7; GPU qualification passed at commit 3430408 on RTX 4000 Ada, 100% GPU, warm p50 4.694s, near-budget 3.042s in evals/reports/phase0-gpu.json; historical attempts preserved) | Approved via user batch authorization (2026-10-13) |
 | G1 | Atomic actual import, duplicates, source locators, authenticated scoped API/read-only role | Passed (candidate 8286e98; independent reviewer PASS; atomic rollback verified, duplicate locators, PDF/CSV/text provenance, constant-time auth, reader write denied, 6/6 tests pass) | Approved via user batch authorization (2026-10-13) |
 | G2 | Live uploaded case → original question → exact totals/explanation → CSV/PDF/text citations | Passed (candidate 807e9b3; independent reviewer PASS; 26/26 tests pass, 12/12 dev eval cases grounded, static UI built and served, pure integer paise accounting verified) | Approved via user batch authorization (2026-10-13) |
 | G3 | Hybrid retrieval/read tools and fixed development baseline | Passed (candidate dec3bc4, hardened in 92c00de; independent reviewer PASS; 28/28 tests pass, candidate recall @ 20: 1.0000, final doc recall @ 6: 1.0000, 12 dev fixed cases captured, typed dispatcher verified) | Approved via user batch authorization (2026-10-13) |
@@ -166,6 +166,16 @@ PRD, ARCHITECTURE, EVALUATION, ROADMAP, and README are synchronized with these d
 2026-10-19: Independent Implementation Re-Audit Round 8 conducted. Findings R8-001 and R8-002 remediated:
 - R8-001: Enforced warm-request failure/timeout participation in Phase-0 feasibility gate (`feasibility_gate` in `run_pilot()`); gate strictly requires all 5 warm requests to complete within configured `model_timeout_seconds` limit (`warm_probes_ok`).
 - R8-002: Fixed processor placement detection in `_observe_ollama_processor()`: computes placement via `_compute_processor_placement()` from API model `size` and `size_vram` attributes (handling 100% GPU, 100% CPU, and mixed splits, correctly preserving 0-byte allocations), with robust regex fallback on CLI `ollama ps`. Full 82 offline regression tests passing (1 live test skipped).
+
+2026-10-23: Phase-0 feasibility measurement executed on intended unconstrained GPU host (NVIDIA RTX 4000 Ada Generation, 20.5 GiB VRAM). Gate G0 passed cleanly (`evals/reports/phase0-gpu.json`):
+- Processor: `100% GPU` (size: 6,295,440,588, size_vram: 6,295,440,588).
+- Model parameters & limits: `qwen3:8b` (digest `500a1f067a9f...`), context 8,192, output allowance 1,024, input token budget 6,000, model timeout 60s, run timeout 240s.
+- Contract probes: 10/10 parsed and passed (0 illegal dispatches).
+- Warm performance: 5/5 warm requests completed (latencies: 3.606s, 4.694s, 4.693s, 4.709s, 4.713s; p50 warm latency: 4.694s).
+- Near-budget probe: 6,000-token request completed in 3.042s within 8,192 context window (prompt eval: 3,675.61 t/s, eval: 48.55 t/s).
+- Offline provider check: passed with expected `MODEL_UNAVAILABLE`.
+- Feasibility gate: `PASS`.
+- Serving route durability: Native host Ollama persistent user service established (`~/.config/systemd/user/ollama.service`, user linger enabled) on `127.0.0.1:11434`. Confirmed IncidentLab accesses Ollama via Docker-internal DNS `http://ollama:11434` without requiring host port 11434. Historical failed Phase-0 artifacts (`evals/reports/phase0.json`, `evals/reports/phase0-clean.json`) preserved unmodified. Final frozen held-out evaluation remains pending.
 
 ## Parked work
 
