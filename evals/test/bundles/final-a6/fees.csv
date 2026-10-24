@@ -1,0 +1,4 @@
+fee_id,order_id,assessed_at,amount_paise,fee_kind
+FEE-FA6-601,ORD-FA6-601,2026-09-05T09:30:00+05:30,225000,processing
+FEE-FA6-602,ORD-FA6-602,2026-09-06T14:00:00+05:30,275000,processing
+FEE-FA6-603,ORD-FA6-603,2026-09-07T16:15:00+05:30,150000,processing

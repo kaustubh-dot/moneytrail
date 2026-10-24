@@ -356,7 +356,7 @@ async def test_inspect_order_cutoff_and_post_cutoff_exclusion(test_settings: Set
     Snapshot expected net must be 4,875,000 paise, received must be 0,
     and post-cutoff records must be preserved as excluded with explicit reasons.
     """
-    test_b6_zip = Path("evals/test/bundles/test-b6.zip")
+    test_b6_zip = Path("tests/fixtures/test-b6.zip")
     assert test_b6_zip.exists()
 
     res = await import_bundle(test_b6_zip, test_settings)

@@ -1,12 +1,12 @@
 # MoneyTrail task status and handoff
 
-Updated 2026-10-23. Status: Post-Audit Remediation (Round 8 Remediated: R8-001/R8-002; G0 qualified on intended GPU-backed host). The initial implementation (Phases 0 through 6) was completed and benchmarked at baseline commit `554fc4edc4f1e8a300dd27e7d521df695a69a714`. Subsequent Independent Implementation Audits identified defects (F-001 through F-011, R2-001 through R2-008, R3-001 through R3-006, R4-001 through R4-004, R5-001 through R5-006, R6-001 through R6-002, and R8-001 through R8-002). All findings have been remediated and verified closed: retrieval provenance fails closed for frozen evaluations requiring exact freeze metadata; review sidecars are strictly bound to evaluated final.json by SHA256; Phase 0 pilot enforces locked 60s model timeout; independent reviews decoupled from execution; historical freeze manifest restored and verified by SHA256; retrieval evaluation strictly bound to freeze; exact pinned tokenizer revision loaded; Ollama serving limits (8192 context, 1024 output) explicitly enforced in shared client; input token budget dynamically targeted with unified template/schema accounting; timeout separated from context-fit evidence; host GPU / processor placement robustly captured via size/size_vram and regex fallback; and warm probe failures/timeouts strictly participate in feasibility gate. Gate G0 feasibility qualified on intended GPU-backed host (NVIDIA RTX 4000 Ada, 100% GPU, warm p50 4.694s, near-budget 3.042s, evals/reports/phase0-gpu.json). Historical failed Phase-0 results remain preserved as diagnostic/history evidence. Final frozen held-out evaluation remains pending.
+Updated 2026-10-24. Status: Final Held-Out Dataset Prepared (Fresh 18-case test set constructed and independently validated; final freeze pending independent review). G0 qualified on intended GPU-backed host (NVIDIA RTX 4000 Ada, 100% GPU, warm p50 4.694s, near-budget 3.042s, evals/reports/phase0-gpu.json). Historical baseline evaluation and freeze preserved.
 
 [PRD.md](PRD.md) owns vision; [ARCHITECTURE.md](ARCHITECTURE.md) owns contracts; [EVALUATION.md](EVALUATION.md) owns verification; [ROADMAP.md](ROADMAP.md) owns exact ordered instructions. This file is the sole canonical checkbox/status/approval ledger.
 
 ### Current position and next action
 
-Current phase: **Post-Audit Remediation (Round 8 Remediated; G0 qualified on intended GPU-backed host)**. Final frozen held-out evaluation remains pending.
+Current phase: **Fresh Final Held-Out Dataset Prepared (18 cases: final-a1 through final-c6 validated; gold verification audit recorded; pending independent review before formal final freeze)**.
 
 ## Canonical task list
 

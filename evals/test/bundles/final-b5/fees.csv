@@ -1,0 +1,2 @@
+fee_id,order_id,assessed_at,amount_paise,fee_kind
+FEE-FB5-501,ORD-FB5-501,2026-09-08T10:00:00+05:30,325000,processing

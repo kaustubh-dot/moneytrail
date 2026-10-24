@@ -1,0 +1,3 @@
+fee_id,order_id,assessed_at,amount_paise,fee_kind
+FEE-FA3-301,ORD-FA3-301,2026-09-14T10:00:00+05:30,210000,processing
+FEE-FA3-302,ORD-FA3-302,2026-09-14T14:30:00+05:30,140000,processing

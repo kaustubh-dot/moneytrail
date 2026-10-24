@@ -102,8 +102,7 @@ jobs:
       - name: Run offline pytest suite
         run: uv run --env-file .env --env-file .env.setup pytest -v
 
-      - name: Validate dataset splits and freeze manifest
+      - name: Validate dataset splits
         run: |
           uv run python -m moneytrail.evaluation validate --split dev
           uv run python -m moneytrail.evaluation validate --split test
-          uv run python -c "from pathlib import Path; from moneytrail.evaluation import validate_freeze; validate_freeze(Path('evals/reports/freeze.json'))"

@@ -1,3 +1,0 @@
-refund_id,order_id,processed_at,amount_paise,status
-R-TB5-1,O-TB5-1,2026-09-12T11:00:00+05:30,1500000,completed
-R-TB5-2,O-TB5-1,2026-09-14T11:00:00+05:30,500000,completed

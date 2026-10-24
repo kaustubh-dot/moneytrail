@@ -1,0 +1,2 @@
+fee_id,order_id,assessed_at,amount_paise,fee_kind
+FEE-FC6-601,ORD-FC6-601,2026-09-10T10:00:00+05:30,137500,processing

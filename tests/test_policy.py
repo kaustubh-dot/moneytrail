@@ -208,7 +208,7 @@ async def test_policy_same_date_exclusive_boundary(test_settings: Settings):
     Under half-open contract effective_from <= captured_date < effective_to,
     POL-EARLY is excluded on 2026-09-15, and POL-LATE is uniquely selected.
     """
-    test_a5_zip = Path("evals/test/bundles/test-a5.zip")
+    test_a5_zip = Path("tests/fixtures/test-a5.zip")
     assert test_a5_zip.exists()
 
     res = await import_bundle(test_a5_zip, test_settings)
